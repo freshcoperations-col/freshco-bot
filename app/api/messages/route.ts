@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/messages?phone=xxx — mensajes de un cliente específico
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)

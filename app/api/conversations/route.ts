@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/conversations — lista todas las conversaciones únicas
 export async function GET() {
   try {
