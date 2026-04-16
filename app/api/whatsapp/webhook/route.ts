@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage } from '@/lib/supabase'
+import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage, isAIPaused } from '@/lib/supabase'
 import { sendWhatsAppMessage, markMessageAsRead, type WhatsAppWebhookPayload } from '@/lib/whatsapp'
 import { processMessage } from '@/lib/agent'
 
@@ -70,11 +70,18 @@ async function processWebhook(body: unknown): Promise<void> {
             whatsapp_message_id: waMessageId,
           })
 
-          // 2. Obtener historial reciente (excluyendo el mensaje actual)
-          const history = await getRecentHistory(supabase, phone, 7)
-          const contextHistory = history.slice(0, -1) // quitar el mensaje que acabamos de guardar
+          // 2. Marcar como leído siempre
+          await markMessageAsRead(waMessageId)
 
-          // 3. Procesar con el agente de IA
+          // 3. Si el AI está pausado (modo manual), no responder
+          const paused = await isAIPaused(supabase, phone)
+          if (paused) continue
+
+          // 4. Obtener historial reciente
+          const history = await getRecentHistory(supabase, phone, 7)
+          const contextHistory = history.slice(0, -1)
+
+          // 5. Procesar con el agente de IA
           let agentResponse: string
           let intent: string
           try {
@@ -88,13 +95,13 @@ async function processWebhook(body: unknown): Promise<void> {
             intent = 'otro'
           }
 
-          // 4. Actualizar intención del mensaje entrante
+          // 6. Actualizar intención del mensaje entrante
           await supabase
             .from('messages')
             .update({ intent })
             .eq('whatsapp_message_id', waMessageId)
 
-          // 5. Guardar respuesta saliente
+          // 7. Guardar respuesta saliente
           await logMessage(supabase, {
             customer_phone: phone,
             direction: 'outbound',
@@ -102,12 +109,11 @@ async function processWebhook(body: unknown): Promise<void> {
             intent,
           })
 
-          // 6. Enviar respuesta por WhatsApp
+          // 8. Enviar respuesta por WhatsApp
           try {
             await sendWhatsAppMessage(phone, agentResponse)
           } catch (error) {
             console.error('Error enviando mensaje WhatsApp:', error)
-            // Reintentar una vez
             await new Promise((r) => setTimeout(r, 2000))
             try {
               await sendWhatsAppMessage(phone, agentResponse)
@@ -115,9 +121,6 @@ async function processWebhook(body: unknown): Promise<void> {
               console.error('Error en reintento WhatsApp:', retryError)
             }
           }
-
-          // 7. Marcar mensaje como leído (no crítico)
-          await markMessageAsRead(waMessageId)
         }
       }
     }

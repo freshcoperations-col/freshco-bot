@@ -112,6 +112,28 @@ export async function isDuplicateMessage(
   return !!data
 }
 
+export async function isAIPaused(
+  supabase: SupabaseClient,
+  phone: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from('conversation_settings')
+    .select('ai_paused')
+    .eq('customer_phone', phone)
+    .single()
+  return data?.ai_paused === true
+}
+
+export async function setAIPaused(
+  supabase: SupabaseClient,
+  phone: string,
+  paused: boolean,
+): Promise<void> {
+  await supabase
+    .from('conversation_settings')
+    .upsert({ customer_phone: phone, ai_paused: paused, updated_at: new Date().toISOString() })
+}
+
 export async function saveOrder(
   supabase: SupabaseClient,
   data: {

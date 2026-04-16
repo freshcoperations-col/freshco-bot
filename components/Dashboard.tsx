@@ -20,6 +20,33 @@ function CustomerDetail({
 }) {
   const [copied, setCopied] = useState(false)
   const [, forceUpdate] = useState(0)
+  const [aiPaused, setAiPaused] = useState(false)
+  const [toggling, setToggling] = useState(false)
+
+  // Cargar estado AI al seleccionar cliente
+  useEffect(() => {
+    if (!phone) return
+    fetch(`/api/conversations/${encodeURIComponent(phone)}/toggle`)
+      .then((r) => r.json())
+      .then((d) => setAiPaused(d.ai_paused ?? false))
+      .catch(() => {})
+  }, [phone])
+
+  async function handleToggleAI() {
+    if (!phone || toggling) return
+    setToggling(true)
+    try {
+      const res = await fetch(`/api/conversations/${encodeURIComponent(phone)}/toggle`, {
+        method: 'PUT',
+      })
+      const data = await res.json()
+      setAiPaused(data.ai_paused)
+    } catch {
+      // silencioso
+    } finally {
+      setToggling(false)
+    }
+  }
 
   // Actualizar tiempo relativo cada 30 segundos
   useEffect(() => {
@@ -60,6 +87,31 @@ function CustomerDetail({
       {/* Header */}
       <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
         Detalles del Cliente
+      </div>
+
+      {/* Toggle modo manual / AI */}
+      <div className="mb-5 p-3 rounded border border-gray-200 bg-gray-50">
+        <div className="text-xs text-gray-500 mb-2 font-medium">Modo de respuesta</div>
+        <button
+          onClick={handleToggleAI}
+          disabled={toggling}
+          className={`w-full flex items-center justify-between px-3 py-2 rounded text-sm font-medium transition-colors ${
+            aiPaused
+              ? 'bg-orange-50 border border-orange-300 text-orange-700 hover:bg-orange-100'
+              : 'bg-green-50 border border-green-300 text-green-700 hover:bg-green-100'
+          } disabled:opacity-50`}
+        >
+          <span className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${aiPaused ? 'bg-orange-400' : 'bg-green-500'}`} />
+            {aiPaused ? 'Modo manual (tú respondes)' : 'AI activo (responde solo)'}
+          </span>
+          <span className="text-xs opacity-60">{toggling ? '...' : 'cambiar'}</span>
+        </button>
+        {aiPaused && (
+          <p className="text-xs text-orange-600 mt-1.5">
+            El AI no responderá. Contesta desde WhatsApp.
+          </p>
+        )}
       </div>
 
       {/* Teléfono */}

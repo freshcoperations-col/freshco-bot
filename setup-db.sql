@@ -48,3 +48,18 @@ CREATE POLICY "Allow anon read orders" ON orders
 
 CREATE POLICY "Allow service role all orders" ON orders
   FOR ALL USING (auth.role() = 'service_role');
+
+-- Tabla para modo manual (pausar AI por conversación)
+CREATE TABLE IF NOT EXISTS conversation_settings (
+  customer_phone text PRIMARY KEY,
+  ai_paused boolean NOT NULL DEFAULT false,
+  updated_at timestamptz DEFAULT now() NOT NULL
+);
+
+ALTER TABLE conversation_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow anon read conversation_settings" ON conversation_settings
+  FOR SELECT USING (true);
+
+CREATE POLICY "Allow service role all conversation_settings" ON conversation_settings
+  FOR ALL USING (auth.role() = 'service_role');
