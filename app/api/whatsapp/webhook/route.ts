@@ -1,0 +1,127 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage } from '@/lib/supabase'
+import { sendWhatsAppMessage, markMessageAsRead, type WhatsAppWebhookPayload } from '@/lib/whatsapp'
+import { processMessage } from '@/lib/agent'
+
+// GET — Verificación del webhook de WhatsApp (Meta)
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const mode = searchParams.get('hub.mode')
+  const token = searchParams.get('hub.verify_token')
+  const challenge = searchParams.get('hub.challenge')
+
+  if (mode === 'subscribe' && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
+    return new NextResponse(challenge, { status: 200 })
+  }
+
+  return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+}
+
+// POST — Recibe mensajes de WhatsApp
+// Retorna 200 inmediatamente y procesa en background para no timeout
+export async function POST(request: NextRequest) {
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ status: 'ok' })
+  }
+
+  // Procesar de forma asíncrona — no bloqueamos la respuesta
+  void processWebhook(body)
+
+  return NextResponse.json({ status: 'ok' })
+}
+
+async function processWebhook(body: unknown): Promise<void> {
+  const supabase = createServerClient()
+
+  try {
+    const data = body as WhatsAppWebhookPayload
+
+    if (data.object !== 'whatsapp_business_account') return
+
+    for (const entry of data.entry ?? []) {
+      for (const change of entry.changes ?? []) {
+        if (change.field !== 'messages') continue
+
+        const messages = change.value?.messages ?? []
+
+        for (const msg of messages) {
+          // Solo procesamos mensajes de texto
+          if (msg.type !== 'text') continue
+
+          const phone = msg.from
+          const text = msg.text?.body ?? ''
+          const waMessageId = msg.id
+
+          if (!text.trim()) continue
+
+          // Verificar duplicados
+          const isDuplicate = await isDuplicateMessage(supabase, waMessageId)
+          if (isDuplicate) continue
+
+          // 1. Guardar mensaje entrante
+          await logMessage(supabase, {
+            customer_phone: phone,
+            direction: 'inbound',
+            content: text,
+            intent: 'otro',
+            whatsapp_message_id: waMessageId,
+          })
+
+          // 2. Obtener historial reciente (excluyendo el mensaje actual)
+          const history = await getRecentHistory(supabase, phone, 7)
+          const contextHistory = history.slice(0, -1) // quitar el mensaje que acabamos de guardar
+
+          // 3. Procesar con el agente de IA
+          let agentResponse: string
+          let intent: string
+          try {
+            const result = await processMessage(phone, text, contextHistory)
+            agentResponse = result.response
+            intent = result.intent
+          } catch (error) {
+            console.error('Error en el agente:', error)
+            agentResponse =
+              'Lo siento, tuve un problema técnico momentáneo. Por favor intenta de nuevo o escríbenos en @freshco.col 🙏'
+            intent = 'otro'
+          }
+
+          // 4. Actualizar intención del mensaje entrante
+          await supabase
+            .from('messages')
+            .update({ intent })
+            .eq('whatsapp_message_id', waMessageId)
+
+          // 5. Guardar respuesta saliente
+          await logMessage(supabase, {
+            customer_phone: phone,
+            direction: 'outbound',
+            content: agentResponse,
+            intent,
+          })
+
+          // 6. Enviar respuesta por WhatsApp
+          try {
+            await sendWhatsAppMessage(phone, agentResponse)
+          } catch (error) {
+            console.error('Error enviando mensaje WhatsApp:', error)
+            // Reintentar una vez
+            await new Promise((r) => setTimeout(r, 2000))
+            try {
+              await sendWhatsAppMessage(phone, agentResponse)
+            } catch (retryError) {
+              console.error('Error en reintento WhatsApp:', retryError)
+            }
+          }
+
+          // 7. Marcar mensaje como leído (no crítico)
+          await markMessageAsRead(waMessageId)
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error procesando webhook:', error)
+  }
+}
