@@ -33,6 +33,27 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ status: 'ok' })
 }
 
+// Cliente que ya escribió antes pero lleva más de 24h sin actividad
+async function checkIsReturningCustomer(
+  supabase: ReturnType<typeof createServerClient>,
+  phone: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from('messages')
+    .select('created_at')
+    .eq('customer_phone', phone)
+    .eq('direction', 'inbound')
+    .order('created_at', { ascending: false })
+    .limit(2)
+
+  if (!data || data.length < 2) return false
+
+  // Tiene historial previo — verificar si el penúltimo mensaje fue hace más de 24h
+  const previousMessage = data[1]
+  const hours24 = 24 * 60 * 60 * 1000
+  return Date.now() - new Date(previousMessage.created_at).getTime() > hours24
+}
+
 async function processWebhook(body: unknown): Promise<void> {
   const supabase = createServerClient()
 
@@ -81,12 +102,15 @@ async function processWebhook(body: unknown): Promise<void> {
           const history = await getRecentHistory(supabase, phone, 7)
           const contextHistory = history.slice(0, -1)
 
+          // Detectar si es cliente que regresa después de 24h sin actividad
+          const isReturningCustomer = await checkIsReturningCustomer(supabase, phone)
+
           // 5. Procesar con el agente de IA
           let agentResponse: string
           let intent: string
           let requestedHuman = false
           try {
-            const result = await processMessage(phone, text, contextHistory)
+            const result = await processMessage(phone, text, contextHistory, isReturningCustomer)
             agentResponse = result.response
             intent = result.intent
             requestedHuman = result.requestedHuman

@@ -159,6 +159,7 @@ export async function processMessage(
   customerPhone: string,
   message: string,
   history: Message[],
+  isReturningCustomer = false,
 ): Promise<{ response: string; intent: Intent; requestedHuman: boolean }> {
   const client = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY })
 
@@ -182,7 +183,7 @@ export async function processMessage(
       response = await client.messages.create({
         model: MODEL,
         max_tokens: MAX_TOKENS,
-        system: buildSystemPrompt(),
+        system: buildSystemPrompt(isReturningCustomer),
         messages: currentMessages,
         tools: TOOLS,
       })
