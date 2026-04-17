@@ -124,21 +124,30 @@ async function processWebhook(body: unknown): Promise<void> {
             }
           }
 
-          // 9. Si el cliente pidió asesor: pausar AI y notificar al asesor
+          // 9. Si el cliente pidió asesor: pausar AI y notificar al asesor vía ntfy
           if (requestedHuman) {
             await setAIPaused(supabase, phone, true)
 
-            const advisorPhone = process.env.ADVISOR_PHONE
-            if (advisorPhone) {
-              const notification =
-                `🔔 *Cliente solicita asesor*\n\n` +
-                `📱 Número: +${phone}\n` +
-                `💬 Último mensaje: "${text}"\n\n` +
-                `El AI está pausado. Escríbele directamente a ese número para atenderlo.`
+            const ntfyTopic = process.env.NTFY_TOPIC
+            if (ntfyTopic) {
+              const waLink = `https://wa.me/${phone}?text=Hola%2C%20soy%20asesor%20de%20Freshco%20%F0%9F%91%8B%20%C2%BFCon%20qui%C3%A9n%20tengo%20el%20gusto%3F`
+              const body =
+                `📱 +${phone}\n` +
+                `💬 "${text}"\n\n` +
+                `👉 ${waLink}`
               try {
-                await sendWhatsAppMessage(advisorPhone, notification)
+                await fetch(`https://ntfy.sh/${ntfyTopic}`, {
+                  method: 'POST',
+                  headers: {
+                    'Title': '🔔 Cliente solicita asesor — Freshco',
+                    'Priority': 'high',
+                    'Tags': 'bell,freshco',
+                    'Content-Type': 'text/plain',
+                  },
+                  body,
+                })
               } catch (error) {
-                console.error('Error enviando notificación al asesor:', error)
+                console.error('Error enviando notificación ntfy:', error)
               }
             }
           }
