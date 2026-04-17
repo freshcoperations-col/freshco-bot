@@ -139,12 +139,12 @@ async function processWebhook(body: unknown): Promise<void> {
                 await fetch(`https://ntfy.sh/${ntfyTopic}`, {
                   method: 'POST',
                   headers: {
-                    'Title': '🔔 Cliente solicita asesor — Freshco',
+                    'Title': 'Cliente solicita asesor - Freshco',
                     'Priority': 'high',
-                    'Tags': 'bell,freshco',
-                    'Content-Type': 'text/plain',
+                    'Tags': 'bell',
+                    'Content-Type': 'text/plain; charset=utf-8',
                   },
-                  body,
+                  body: Buffer.from(body, 'utf-8'),
                 })
               } catch (error) {
                 console.error('Error enviando notificación ntfy:', error)
