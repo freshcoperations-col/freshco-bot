@@ -163,7 +163,7 @@ export async function processMessage(
   customerPhone: string,
   message: string,
   history: Message[],
-): Promise<{ response: string; intent: Intent }> {
+): Promise<{ response: string; intent: Intent; requestedHuman: boolean }> {
   const client = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY })
 
   // Construir historial de mensajes para Claude
@@ -196,6 +196,7 @@ export async function processMessage(
         response:
           'Lo siento, tuve un problema técnico. Por favor intenta de nuevo o escríbenos en Instagram @freshco.col 🙏',
         intent: 'otro',
+        requestedHuman: false,
       }
     }
 
@@ -238,7 +239,11 @@ export async function processMessage(
     // Limpiar el marcador antes de enviar al cliente
     const cleanResponse = fullText.replace(/\[INTENCION:[^\]]+\]/g, '').trim()
 
-    return { response: cleanResponse || 'No entendí tu mensaje. ¿Puedes intentar de nuevo?', intent }
+    return {
+      response: cleanResponse || 'No entendí tu mensaje. ¿Puedes intentar de nuevo?',
+      intent,
+      requestedHuman: intent === 'solicita_asesor',
+    }
   }
 
   // Se agotaron las iteraciones
@@ -246,5 +251,6 @@ export async function processMessage(
     response:
       'Tuve un problema procesando tu consulta. Por favor contáctanos en @freshco.col 🙏',
     intent: 'otro',
+    requestedHuman: false,
   }
 }

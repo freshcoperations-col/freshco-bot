@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage, isAIPaused } from '@/lib/supabase'
+import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage, isAIPaused, setAIPaused } from '@/lib/supabase'
 import { sendWhatsAppMessage, markMessageAsRead, type WhatsAppWebhookPayload } from '@/lib/whatsapp'
 import { processMessage } from '@/lib/agent'
 
@@ -84,10 +84,12 @@ async function processWebhook(body: unknown): Promise<void> {
           // 5. Procesar con el agente de IA
           let agentResponse: string
           let intent: string
+          let requestedHuman = false
           try {
             const result = await processMessage(phone, text, contextHistory)
             agentResponse = result.response
             intent = result.intent
+            requestedHuman = result.requestedHuman
           } catch (error) {
             console.error('Error en el agente:', error)
             agentResponse =
@@ -119,6 +121,25 @@ async function processWebhook(body: unknown): Promise<void> {
               await sendWhatsAppMessage(phone, agentResponse)
             } catch (retryError) {
               console.error('Error en reintento WhatsApp:', retryError)
+            }
+          }
+
+          // 9. Si el cliente pidió asesor: pausar AI y notificar al asesor
+          if (requestedHuman) {
+            await setAIPaused(supabase, phone, true)
+
+            const advisorPhone = process.env.ADVISOR_PHONE
+            if (advisorPhone) {
+              const notification =
+                `🔔 *Cliente solicita asesor*\n\n` +
+                `📱 Número: +${phone}\n` +
+                `💬 Último mensaje: "${text}"\n\n` +
+                `El AI está pausado. Escríbele directamente a ese número para atenderlo.`
+              try {
+                await sendWhatsAppMessage(advisorPhone, notification)
+              } catch (error) {
+                console.error('Error enviando notificación al asesor:', error)
+              }
             }
           }
         }
