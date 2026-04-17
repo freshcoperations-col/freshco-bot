@@ -53,6 +53,7 @@ CREATE POLICY "Allow service role all orders" ON orders
 CREATE TABLE IF NOT EXISTS conversation_settings (
   customer_phone text PRIMARY KEY,
   ai_paused boolean NOT NULL DEFAULT false,
+  paused_at timestamptz,
   updated_at timestamptz DEFAULT now() NOT NULL
 );
 

@@ -16,6 +16,7 @@ PERSONALIDAD:
 INFORMACIÓN DE LA TIENDA:
 - Nombre: ${STORE_INFO.name}
 - Ciudad: ${STORE_INFO.city}, ${STORE_INFO.country}
+- Vendemos únicamente camisetas oversize con estampado DTF, 100% algodón
 - Enviamos a TODO el país
 - Instagram: ${STORE_INFO.instagram}
 - Horario de atención: ${STORE_INFO.schedule}

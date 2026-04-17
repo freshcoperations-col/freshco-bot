@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { buildSystemPrompt } from './system-prompt'
-import { PRODUCTS, SIZE_GUIDE, SHIPPING_INFO } from './product-catalog'
+import { PRODUCTS, SIZE_GUIDE, SHIPPING_INFO, DTF_CARE } from './product-catalog'
 import { PAYMENT_METHODS } from './store-info'
 import { createServerClient, saveOrder, type Message, type OrderItem } from './supabase'
 import { isValidIntent, type Intent } from './intents'
@@ -34,7 +34,7 @@ const TOOLS: Anthropic.Tool[] = [
       properties: {
         category: {
           type: 'string',
-          description: 'Categoría de prenda: camisetas, jeans, sudaderas_hoodies',
+          description: 'Categoría de prenda: camisetas_oversize',
         },
       },
     },
@@ -111,18 +111,14 @@ async function executeTool(
       const products = category
         ? PRODUCTS.filter((p) => p.category.toLowerCase() === category.toLowerCase())
         : PRODUCTS
-      return JSON.stringify(products)
+      return JSON.stringify({ products, cuidados_dtf: DTF_CARE })
     }
 
     case 'get_size_guide': {
-      const category = input.category as string | undefined
-      if (category && category in SIZE_GUIDE) {
-        return JSON.stringify({
-          [category]: SIZE_GUIDE[category as keyof typeof SIZE_GUIDE],
-          consejo: SIZE_GUIDE.consejo,
-        })
-      }
-      return JSON.stringify(SIZE_GUIDE)
+      return JSON.stringify({
+        ...SIZE_GUIDE,
+        cuidados_dtf: DTF_CARE,
+      })
     }
 
     case 'get_shipping_info':

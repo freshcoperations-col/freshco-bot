@@ -118,10 +118,23 @@ export async function isAIPaused(
 ): Promise<boolean> {
   const { data } = await supabase
     .from('conversation_settings')
-    .select('ai_paused')
+    .select('ai_paused, paused_at')
     .eq('customer_phone', phone)
     .single()
-  return data?.ai_paused === true
+
+  if (!data?.ai_paused) return false
+
+  // Auto-reactivar si lleva más de 24 horas pausado
+  if (data.paused_at) {
+    const pausedAt = new Date(data.paused_at).getTime()
+    const hours24 = 24 * 60 * 60 * 1000
+    if (Date.now() - pausedAt > hours24) {
+      await setAIPaused(supabase, phone, false)
+      return false
+    }
+  }
+
+  return true
 }
 
 export async function setAIPaused(
@@ -131,7 +144,12 @@ export async function setAIPaused(
 ): Promise<void> {
   await supabase
     .from('conversation_settings')
-    .upsert({ customer_phone: phone, ai_paused: paused, updated_at: new Date().toISOString() })
+    .upsert({
+      customer_phone: phone,
+      ai_paused: paused,
+      paused_at: paused ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
 }
 
 export async function saveOrder(
