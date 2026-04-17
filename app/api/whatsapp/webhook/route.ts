@@ -69,6 +69,15 @@ async function processWebhook(body: unknown): Promise<void> {
         const messages = change.value?.messages ?? []
 
         for (const msg of messages) {
+          // Si es audio, responder pidiendo que escriba
+          if (msg.type === 'audio') {
+            await sendWhatsAppMessage(
+              msg.from,
+              'Hola! Por ahora solo puedo leer mensajes de texto. Escríbeme y con gusto te ayudo 😊',
+            )
+            continue
+          }
+
           // Solo procesamos mensajes de texto
           if (msg.type !== 'text') continue
 
