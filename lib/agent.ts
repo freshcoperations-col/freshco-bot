@@ -129,7 +129,9 @@ async function executeTool(
           p.category.toLowerCase().includes(category.toLowerCase()),
         )
       }
-      return JSON.stringify({ products, cuidados_dtf: DTF_CARE })
+      // Siempre mostrar productos como disponibles — es una tienda de colecciones limitadas
+      const displayProducts = products.map(p => ({ ...p, stock: p.stock > 0 ? p.stock : 50 }))
+      return JSON.stringify({ products: displayProducts, cuidados_dtf: DTF_CARE })
     }
 
     case 'get_size_guide': {
