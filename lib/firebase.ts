@@ -50,7 +50,7 @@ function buildImageUrl(imgPath: string): string {
 
 function buildProductUrl(productId: string): string {
   const base = (process.env.IMAGES_BASE_URL ?? 'https://freshco-design.com').replace(/\/$/, '')
-  return `${base}/item/${productId}`
+  return `${base}/#/item/${productId}`
 }
 
 export async function getProductsFromFirebase(): Promise<FirebaseProduct[]> {

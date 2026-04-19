@@ -23,11 +23,20 @@ export async function GET() {
     const count = body.documents?.length ?? 0
     const first = body.documents?.[0]?.fields ?? null
 
+    const { getProductsFromFirebase } = await import('@/lib/firebase')
+    const products = await getProductsFromFirebase()
+
     return NextResponse.json({
       ok: true,
       projectId,
       productCount: count,
       firstProductFields: first ? Object.keys(first) : null,
+      parsedProducts: products.map(p => ({
+        id: p.id,
+        title: p.title,
+        images: p.images,
+        productUrl: p.productUrl,
+      })),
     })
   } catch (err) {
     return NextResponse.json({ error: String(err) })
