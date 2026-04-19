@@ -55,10 +55,12 @@ export async function getProductsFromFirebase(): Promise<FirebaseProduct[]> {
 
   try {
     const url = `${FIRESTORE_BASE}/projects/${PROJECT_ID}/databases/(default)/documents/products?key=${API_KEY}`
-    const res = await fetch(url, { next: { revalidate: 60 } }) // cache 1 minuto
+    console.log('Fetching Firebase products from:', `projects/${PROJECT_ID}/documents/products`)
+    const res = await fetch(url, { cache: 'no-store' })
 
     if (!res.ok) {
-      console.error('Error fetching Firebase products:', res.status)
+      const errBody = await res.text()
+      console.error('Error fetching Firebase products:', res.status, errBody)
       return []
     }
 
