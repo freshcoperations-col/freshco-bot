@@ -2,8 +2,6 @@
 // Lee el catálogo de productos en tiempo real desde Firebase
 
 const FIRESTORE_BASE = 'https://firestore.googleapis.com/v1'
-const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? 'camisas-sergio'
-const API_KEY = process.env.FIREBASE_API_KEY
 
 export interface FirebaseProduct {
   id: string
@@ -54,6 +52,9 @@ function buildProductUrl(productId: string): string {
 }
 
 export async function getProductsFromFirebase(): Promise<FirebaseProduct[]> {
+  const API_KEY = process.env.FIREBASE_API_KEY
+  const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? 'camisas-sergio'
+
   if (!API_KEY) {
     console.warn('FIREBASE_API_KEY no configurado — usando catálogo local')
     return []
