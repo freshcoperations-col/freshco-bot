@@ -58,6 +58,7 @@ export async function sendWhatsAppImage(to: string, imageUrl: string, caption?: 
 
   if (!response.ok) {
     const errorText = await response.text()
+    console.error(`WhatsApp image error — URL: ${imageUrl} — ${response.status}: ${errorText}`)
     throw new Error(`WhatsApp image API error ${response.status}: ${errorText}`)
   }
 }
