@@ -39,16 +39,18 @@ function parseFirestoreValue(value: Record<string, unknown>): unknown {
 
 function buildImageUrl(imgPath: string): string {
   const base = (process.env.IMAGES_BASE_URL ?? 'https://freshco-design.com').replace(/\/$/, '')
-  // Si ya es URL completa, devolverla tal cual
-  if (imgPath.startsWith('http')) return imgPath
-  // El path ya incluye "camisas/..." — solo agregar base
+  // Si ya es URL completa, asegurarse de que los espacios estén codificados
+  if (imgPath.startsWith('http')) {
+    return imgPath.replace(/ /g, '%20')
+  }
+  // El path ya incluye "camisas/..." — solo agregar base y codificar espacios
   const clean = imgPath.replace(/^\//, '')
-  return `${base}/${clean}`
+  return `${base}/${clean.replace(/ /g, '%20')}`
 }
 
 function buildProductUrl(productId: string): string {
   const base = (process.env.IMAGES_BASE_URL ?? 'https://freshco-design.com').replace(/\/$/, '')
-  return `${base}/product/${productId}`
+  return `${base}/item/${productId}`
 }
 
 export async function getProductsFromFirebase(): Promise<FirebaseProduct[]> {
