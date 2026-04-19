@@ -13,7 +13,8 @@ export interface FirebaseProduct {
   price: number
   sizes: string[]
   stock: number
-  images: string[] // URLs completas
+  images: string[]   // URLs completas
+  productUrl: string // Link directo para comprar
 }
 
 // Parsea el formato de Firestore ({stringValue: "..."}) a un objeto plano
@@ -42,9 +43,14 @@ function buildImageUrl(imgPath: string): string {
   const base = (process.env.IMAGES_BASE_URL ?? 'https://freshco-design.com').replace(/\/$/, '')
   // Si ya es URL completa, devolverla tal cual
   if (imgPath.startsWith('http')) return imgPath
-  // Construir URL: base + /camisas/ + filename
+  // El path ya incluye "camisas/..." — solo agregar base
   const clean = imgPath.replace(/^\//, '')
-  return `${base}/camisas/${clean}`
+  return `${base}/${clean}`
+}
+
+function buildProductUrl(productId: string): string {
+  const base = (process.env.IMAGES_BASE_URL ?? 'https://freshco-design.com').replace(/\/$/, '')
+  return `${base}/product/${productId}`
 }
 
 export async function getProductsFromFirebase(): Promise<FirebaseProduct[]> {
@@ -87,6 +93,7 @@ export async function getProductsFromFirebase(): Promise<FirebaseProduct[]> {
         sizes: parseFirestoreValue(f.sizes ?? { arrayValue: {} }) as string[],
         stock: parseFirestoreValue(f.stock ?? { integerValue: '0' }) as number,
         images,
+        productUrl: buildProductUrl(id),
       }
     })
   } catch (error) {

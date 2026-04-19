@@ -22,6 +22,9 @@ INFORMACIÓN DE LA TIENDA:
 - Ciudad: ${STORE_INFO.city}, ${STORE_INFO.country}
 - Vendemos únicamente camisetas oversize con estampado DTF, 100% algodón
 - Enviamos a TODO el país
+- Tienda online: https://freshco-design.com — el cliente puede comprar directamente ahí
+- Códigos de descuento disponibles: OVERS10 (10% off) y BIENVENIDO20 (20% off)
+- Cuando muestres un producto, incluye su link de compra directo si lo tienes disponible
 - Instagram: ${STORE_INFO.instagram}
 - Horario de atención: ${STORE_INFO.schedule}
 - Compras mayores a $150.000 tienen envío gratis a Bogotá

@@ -145,16 +145,16 @@ async function processWebhook(body: unknown): Promise<void> {
             intent,
           })
 
-          // 8. Si consultó productos, enviar fotos primero
+          // 8. Si consultó productos, enviar fotos con caption y link de compra
           if (intent === 'consulta_producto') {
             try {
               const products = await getProductsFromFirebase()
               for (const product of products) {
                 if (product.images.length > 0) {
-                  await sendWhatsAppImage(phone, product.images[0], product.title)
-                  // Pequeña pausa entre imágenes para no saturar
+                  const caption = `${product.title} — $${product.price.toLocaleString('es-CO')}\n👉 Comprar: ${product.productUrl}`
+                  await sendWhatsAppImage(phone, product.images[0], caption)
                   if (products.indexOf(product) < products.length - 1) {
-                    await new Promise((r) => setTimeout(r, 500))
+                    await new Promise((r) => setTimeout(r, 600))
                   }
                 }
               }
