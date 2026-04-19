@@ -31,6 +31,37 @@ export async function sendWhatsAppMessage(to: string, message: string): Promise<
   }
 }
 
+export async function sendWhatsAppImage(to: string, imageUrl: string, caption?: string): Promise<void> {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
+
+  if (!phoneNumberId || !accessToken) return
+
+  const toClean = to.replace(/^\+/, '')
+
+  const response = await fetch(`${WHATSAPP_API_URL}/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: toClean,
+      type: 'image',
+      image: {
+        link: imageUrl,
+        ...(caption ? { caption } : {}),
+      },
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`WhatsApp image API error ${response.status}: ${errorText}`)
+  }
+}
+
 export async function markMessageAsRead(messageId: string): Promise<void> {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN

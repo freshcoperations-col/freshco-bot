@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { buildSystemPrompt } from './system-prompt'
 import { PRODUCTS, SIZE_GUIDE, SHIPPING_INFO, DTF_CARE } from './product-catalog'
+import { getProductsFromFirebase } from './firebase'
 import { PAYMENT_METHODS } from './store-info'
 import { createServerClient, saveOrder, type Message, type OrderItem } from './supabase'
 import { isValidIntent, type Intent } from './intents'
@@ -108,9 +109,25 @@ async function executeTool(
   switch (name) {
     case 'get_product_catalog': {
       const category = input.category as string | undefined
-      const products = category
-        ? PRODUCTS.filter((p) => p.category.toLowerCase() === category.toLowerCase())
-        : PRODUCTS
+      // Intentar cargar desde Firebase — si falla, usar catálogo local
+      let products = await getProductsFromFirebase()
+      if (products.length === 0) {
+        products = PRODUCTS.map((p) => ({
+          id: p.id,
+          title: p.name,
+          description: p.description,
+          category: p.category,
+          price: p.price,
+          sizes: p.sizes,
+          stock: 99,
+          images: [],
+        }))
+      }
+      if (category) {
+        products = products.filter((p) =>
+          p.category.toLowerCase().includes(category.toLowerCase()),
+        )
+      }
       return JSON.stringify({ products, cuidados_dtf: DTF_CARE })
     }
 

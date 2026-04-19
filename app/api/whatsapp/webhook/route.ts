@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage, isAIPaused, setAIPaused } from '@/lib/supabase'
-import { sendWhatsAppMessage, markMessageAsRead, type WhatsAppWebhookPayload } from '@/lib/whatsapp'
+import { sendWhatsAppMessage, sendWhatsAppImage, markMessageAsRead, type WhatsAppWebhookPayload } from '@/lib/whatsapp'
 import { processMessage } from '@/lib/agent'
+import { getProductsFromFirebase } from '@/lib/firebase'
 
 // GET — Verificación del webhook de WhatsApp (Meta)
 export async function GET(request: NextRequest) {
@@ -144,7 +145,25 @@ async function processWebhook(body: unknown): Promise<void> {
             intent,
           })
 
-          // 8. Enviar respuesta por WhatsApp
+          // 8. Si consultó productos, enviar fotos primero
+          if (intent === 'consulta_producto') {
+            try {
+              const products = await getProductsFromFirebase()
+              for (const product of products) {
+                if (product.images.length > 0) {
+                  await sendWhatsAppImage(phone, product.images[0], product.title)
+                  // Pequeña pausa entre imágenes para no saturar
+                  if (products.indexOf(product) < products.length - 1) {
+                    await new Promise((r) => setTimeout(r, 500))
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('Error enviando imágenes:', error)
+            }
+          }
+
+          // 9. Enviar respuesta de texto por WhatsApp
           try {
             await sendWhatsAppMessage(phone, agentResponse)
           } catch (error) {
@@ -157,7 +176,7 @@ async function processWebhook(body: unknown): Promise<void> {
             }
           }
 
-          // 9. Si el cliente pidió asesor: pausar AI y notificar al asesor vía ntfy
+          // 10. Si el cliente pidió asesor: pausar AI y notificar al asesor vía ntfy
           if (requestedHuman) {
             await setAIPaused(supabase, phone, true)
 
