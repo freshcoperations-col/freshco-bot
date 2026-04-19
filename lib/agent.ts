@@ -121,6 +121,7 @@ async function executeTool(
           sizes: p.sizes,
           stock: 99,
           images: [],
+          productUrl: `https://freshco-design.com/product/${p.id}`,
         }))
       }
       if (category) {
