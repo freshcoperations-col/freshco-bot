@@ -19,6 +19,17 @@ export interface Order {
   payment_method: string | null
   status: string
   created_at: string
+  // Wompi payment fields (added in migration-2026-05-29-orders-payments.sql)
+  wompi_reference: string | null
+  wompi_transaction_id: string | null
+  payment_status: 'pending' | 'approved' | 'declined' | 'voided' | 'error'
+  payment_link_url: string | null
+  amount_in_cents: number | null
+  currency: string | null
+  paid_at: string | null
+  customer_name: string | null
+  customer_email: string | null
+  source: 'whatsapp_bot' | 'webpage'
 }
 
 export interface OrderItem {
@@ -160,11 +171,18 @@ export async function saveOrder(
     total: number
     shipping_address: string
     payment_method: string
+    customer_name?: string
+    customer_email?: string
+    wompi_reference?: string
+    payment_link_url?: string
+    amount_in_cents?: number
+    currency?: string
+    source?: 'whatsapp_bot' | 'webpage'
   },
 ): Promise<Order | null> {
   const { data: order, error } = await supabase
     .from('orders')
-    .insert(data)
+    .insert({ source: 'whatsapp_bot', ...data })
     .select()
     .single()
 
@@ -173,4 +191,49 @@ export async function saveOrder(
     return null
   }
   return order
+}
+
+// Actualiza una orden por su Wompi reference (lo que devuelve el webhook).
+// Si la orden no existe la creamos vacía para no perder el evento (caso
+// raro: webhook llega antes de que el bot guardara la orden).
+export async function updateOrderByReference(
+  supabase: SupabaseClient,
+  reference: string,
+  patch: Partial<Order>,
+): Promise<Order | null> {
+  const { data: existing } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('wompi_reference', reference)
+    .maybeSingle()
+
+  if (!existing) {
+    console.warn(`Webhook recibido para referencia desconocida: ${reference}`)
+    return null
+  }
+
+  const { data: updated, error } = await supabase
+    .from('orders')
+    .update(patch)
+    .eq('id', existing.id)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error actualizando orden:', error)
+    return null
+  }
+  return updated
+}
+
+export async function getOrderByReference(
+  supabase: SupabaseClient,
+  reference: string,
+): Promise<Order | null> {
+  const { data } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('wompi_reference', reference)
+    .maybeSingle()
+  return (data as Order | null) ?? null
 }

@@ -1,73 +1,147 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { buildSystemPrompt } from './system-prompt'
-import { PRODUCTS, SIZE_GUIDE, SHIPPING_INFO, DTF_CARE } from './product-catalog'
-import { getProductsFromFirebase } from './firebase'
+import { SIZE_GUIDE, SHIPPING_INFO, DTF_CARE } from './product-catalog'
 import { PAYMENT_METHODS } from './store-info'
-import { createServerClient, saveOrder, type Message, type OrderItem } from './supabase'
+import {
+  createServerClient,
+  saveOrder,
+  type Message,
+  type OrderItem,
+} from './supabase'
+import {
+  searchProducts,
+  getProductById,
+  getCollections,
+  getGarmentTypes,
+  summarizeForAgent,
+} from './products-db'
+import { buildPaymentLink, newReference } from './wompi'
 import { isValidIntent, type Intent } from './intents'
 
-// Modelo: claude-haiku-4-5 — rápido y económico, ideal para chatbot de WhatsApp
+// Modelo: claude-haiku-4-5 — rápido y económico, ideal para WhatsApp.
+// Para tareas más complejas considerar claude-sonnet-4-6.
 const MODEL = 'claude-haiku-4-5'
 const MAX_TOKENS = 1024
-const MAX_TOOL_ITERATIONS = 5
+const MAX_TOOL_ITERATIONS = 6
 
 const TOOLS: Anthropic.Tool[] = [
   {
-    name: 'get_product_catalog',
+    name: 'search_products',
     description:
-      'Obtiene el catálogo completo de productos de Freshco con precios, tallas disponibles y colores. Úsalo cuando el cliente pregunte por productos, precios o disponibilidad.',
+      'Busca productos en el catálogo de Freshco (Supabase). Úsalo SIEMPRE que el cliente pregunte por productos, precios, colores, tallas, colecciones o disponibilidad. Devuelve los productos con id, nombre, precio, link a la página web y foto frontal. Filtra por cualquier combinación de parámetros; si no pasas filtros devuelve todo el catálogo disponible.',
     input_schema: {
       type: 'object',
       properties: {
-        category: {
+        query: {
           type: 'string',
-          description: 'Filtrar por categoría (opcional): Camisetas, Jeans, Sudaderas, Hoodies, Chaquetas, Shorts, Pantalones, Accesorios',
+          description: 'Texto libre para buscar en nombre, descripción, colección o color (ej: "tóxica", "vainilla", "todo melo").',
         },
+        garment_type: {
+          type: 'string',
+          description: 'Slug del tipo de prenda. Valores reales en el catálogo: camisetas, pantalones, hoodies.',
+        },
+        collection: {
+          type: 'string',
+          description: 'Slug de la colección (ej: "todo-melo"). Llama a list_collections para ver las disponibles.',
+        },
+        audience: {
+          type: 'string',
+          enum: ['mujer', 'hombre', 'unisex'],
+          description: 'Filtrar por audiencia. Hoy todos los productos son unisex.',
+        },
+        size: { type: 'string', description: 'Talla específica (S, M, L, XL, XXL).' },
+        color: { type: 'string', description: 'Color específico (ej: Vainilla).' },
+        on_sale: { type: 'boolean', description: 'Solo productos en oferta.' },
+        limit: { type: 'number', description: 'Máximo de productos a devolver. Por defecto 20.' },
       },
     },
   },
   {
-    name: 'get_size_guide',
+    name: 'get_product_by_id',
     description:
-      'Obtiene la guía de tallas de Freshco con medidas en centímetros. Úsalo cuando el cliente pregunte por tallas o necesite saber qué talla elegir.',
+      'Obtiene un producto específico por su id/slug. Úsalo cuando ya identificaste el producto que quiere el cliente y necesitas detalles completos (descripción, material, todas las tallas, etc.) o cuando vas a crear el link de pago.',
     input_schema: {
       type: 'object',
       properties: {
-        category: {
-          type: 'string',
-          description: 'Categoría de prenda: camisetas_oversize',
-        },
+        id: { type: 'string', description: 'Slug del producto (ej: "no-se-mate-el-coco").' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'list_collections',
+    description:
+      'Lista las colecciones activas en el catálogo con su slug y nombre. Úsalo si el cliente pregunta "qué colecciones tienen" o si necesitas el slug exacto antes de filtrar.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'list_garment_types',
+    description:
+      'Lista los tipos de prenda disponibles (camisetas, pantalones, etc.).',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_size_guide',
+    description:
+      'Guía de tallas en centímetros. Úsalo cuando el cliente pregunte por medidas, o si dudan qué talla pedir.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', description: 'Categoría: camisetas_oversize.' },
       },
     },
   },
   {
     name: 'get_shipping_info',
-    description:
-      'Obtiene información de tiempos de entrega y costos de envío para Colombia. Úsalo cuando el cliente pregunte por envíos, domicilios o tiempos de entrega.',
-    input_schema: {
-      type: 'object',
-      properties: {},
-    },
+    description: 'Tiempos y costos de envío en Colombia.',
+    input_schema: { type: 'object', properties: {} },
   },
   {
     name: 'get_payment_methods',
     description:
-      'Obtiene los métodos de pago disponibles en Freshco. Úsalo cuando el cliente pregunte cómo puede pagar.',
-    input_schema: {
-      type: 'object',
-      properties: {},
-    },
+      'Métodos de pago disponibles (Nequi, Bancolombia, link de tarjeta Wompi, contraentrega, etc.).',
+    input_schema: { type: 'object', properties: {} },
   },
   {
-    name: 'create_order',
+    name: 'create_payment_link',
     description:
-      'Crea un pedido cuando el cliente haya confirmado todos los datos: productos, talla, color, dirección de envío y método de pago.',
+      'Genera un link de pago seguro con Wompi (tarjeta crédito/débito, PSE, Nequi, Bancolombia Transfer) para que el cliente pague desde el navegador. Crea la orden en estado pendiente y devuelve la URL para enviarla por WhatsApp. ÚSALO únicamente cuando el cliente ya confirmó: producto(s), talla, color, dirección de envío y eligió "link de pago" o "tarjeta" como método. La confirmación del pago llega automáticamente por webhook — no hace falta crear otra orden después.',
     input_schema: {
       type: 'object',
       properties: {
         items: {
           type: 'array',
-          description: 'Lista de productos del pedido',
+          description: 'Productos del pedido.',
+          items: {
+            type: 'object',
+            properties: {
+              product_id: { type: 'string' },
+              product_name: { type: 'string' },
+              size: { type: 'string' },
+              color: { type: 'string' },
+              quantity: { type: 'number' },
+              unit_price: { type: 'number', description: 'Precio unitario en COP.' },
+            },
+            required: ['product_id', 'product_name', 'size', 'color', 'quantity', 'unit_price'],
+          },
+        },
+        total: { type: 'number', description: 'Total en pesos colombianos (COP), envío incluido.' },
+        shipping_address: { type: 'string', description: 'Dirección completa (nombre, ciudad, barrio, dirección, indicaciones).' },
+        customer_name: { type: 'string', description: 'Nombre del cliente.' },
+        customer_email: { type: 'string', description: 'Correo del cliente (opcional, mejora la experiencia de pago).' },
+      },
+      required: ['items', 'total', 'shipping_address', 'customer_name'],
+    },
+  },
+  {
+    name: 'create_order',
+    description:
+      'Crea un pedido SIN link de pago — úsalo solo para métodos manuales como Nequi/Bancolombia transferencia o contraentrega. Para pagos con tarjeta usa create_payment_link.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
           items: {
             type: 'object',
             properties: {
@@ -81,18 +155,10 @@ const TOOLS: Anthropic.Tool[] = [
             required: ['product_id', 'product_name', 'size', 'color', 'quantity', 'unit_price'],
           },
         },
-        total: {
-          type: 'number',
-          description: 'Total del pedido en pesos colombianos (COP)',
-        },
-        shipping_address: {
-          type: 'string',
-          description: 'Dirección completa de envío (nombre, ciudad, barrio, dirección)',
-        },
-        payment_method: {
-          type: 'string',
-          description: 'Método de pago elegido por el cliente',
-        },
+        total: { type: 'number' },
+        shipping_address: { type: 'string' },
+        payment_method: { type: 'string', description: 'Nequi, Bancolombia, Daviplata, Contraentrega.' },
+        customer_name: { type: 'string' },
       },
       required: ['items', 'total', 'shipping_address', 'payment_method'],
     },
@@ -107,39 +173,44 @@ async function executeTool(
   customerPhone: string,
 ): Promise<string> {
   switch (name) {
-    case 'get_product_catalog': {
-      const category = input.category as string | undefined
-      // Intentar cargar desde Firebase — si falla, usar catálogo local
-      let products = await getProductsFromFirebase()
-      if (products.length === 0) {
-        products = PRODUCTS.map((p) => ({
-          id: p.id,
-          title: p.name,
-          description: p.description,
-          category: p.category,
-          price: p.price,
-          sizes: p.sizes,
-          stock: 99,
-          images: [],
-          productUrl: `https://freshco-design.com/product/${p.id}`,
-        }))
-      }
-      if (category) {
-        products = products.filter((p) =>
-          p.category.toLowerCase().includes(category.toLowerCase()),
-        )
-      }
-      // Siempre mostrar productos como disponibles — es una tienda de colecciones limitadas
-      const displayProducts = products.map(p => ({ ...p, stock: p.stock > 0 ? p.stock : 50 }))
-      return JSON.stringify({ products: displayProducts, cuidados_dtf: DTF_CARE })
-    }
-
-    case 'get_size_guide': {
+    case 'search_products': {
+      const limit = typeof input.limit === 'number' ? input.limit : 20
+      const products = await searchProducts({
+        query: input.query as string | undefined,
+        garment_type: input.garment_type as string | undefined,
+        collection: input.collection as string | undefined,
+        audience: input.audience as 'mujer' | 'hombre' | 'unisex' | undefined,
+        size: input.size as string | undefined,
+        color: input.color as string | undefined,
+        on_sale: input.on_sale as boolean | undefined,
+        only_available: true,
+        limit,
+      })
       return JSON.stringify({
-        ...SIZE_GUIDE,
-        cuidados_dtf: DTF_CARE,
+        count: products.length,
+        products: products.map(summarizeForAgent),
       })
     }
+
+    case 'get_product_by_id': {
+      const id = String(input.id ?? '')
+      const product = await getProductById(id)
+      if (!product) return JSON.stringify({ error: `Producto '${id}' no encontrado.` })
+      return JSON.stringify({ product: summarizeForAgent(product) })
+    }
+
+    case 'list_collections': {
+      const cols = await getCollections()
+      return JSON.stringify({ collections: cols })
+    }
+
+    case 'list_garment_types': {
+      const gts = await getGarmentTypes()
+      return JSON.stringify({ garment_types: gts })
+    }
+
+    case 'get_size_guide':
+      return JSON.stringify({ ...SIZE_GUIDE, cuidados_dtf: DTF_CARE })
 
     case 'get_shipping_info':
       return JSON.stringify(SHIPPING_INFO)
@@ -147,14 +218,73 @@ async function executeTool(
     case 'get_payment_methods':
       return JSON.stringify(PAYMENT_METHODS)
 
+    case 'create_payment_link': {
+      try {
+        const items = input.items as OrderItem[]
+        const total = Number(input.total)
+        const shippingAddress = String(input.shipping_address)
+        const customerName = String(input.customer_name)
+        const customerEmail = input.customer_email ? String(input.customer_email) : undefined
+        const reference = newReference(customerPhone)
+        const amountInCents = Math.round(total * 100)
+
+        const paymentLink = buildPaymentLink({
+          reference,
+          amountInCents,
+          currency: 'COP',
+          customerEmail,
+          customerName,
+          customerPhone,
+        })
+
+        const supabase = createServerClient()
+        const order = await saveOrder(supabase, {
+          customer_phone: customerPhone,
+          items,
+          total,
+          shipping_address: shippingAddress,
+          payment_method: 'Wompi (link de pago)',
+          customer_name: customerName,
+          customer_email: customerEmail,
+          wompi_reference: reference,
+          payment_link_url: paymentLink,
+          amount_in_cents: amountInCents,
+          currency: 'COP',
+          source: 'whatsapp_bot',
+        })
+
+        if (!order) {
+          return JSON.stringify({ error: 'No se pudo guardar la orden. Intenta de nuevo.' })
+        }
+
+        return JSON.stringify({
+          success: true,
+          order_id: order.id,
+          reference,
+          payment_link: paymentLink,
+          message:
+            `Link de pago generado. Comparte el siguiente texto con el cliente: "Listo. Tu pedido por $${total.toLocaleString('es-CO')} está reservado. Paga aquí: ${paymentLink}  Cuando se complete el pago te confirmamos por este chat."`,
+        })
+      } catch (error) {
+        console.error('Error generando link de pago:', error)
+        const msg = error instanceof Error ? error.message : 'Error desconocido.'
+        return JSON.stringify({
+          error: `No se pudo generar el link de pago: ${msg}`,
+        })
+      }
+    }
+
     case 'create_order': {
       const supabase = createServerClient()
+      const customerName = input.customer_name ? String(input.customer_name) : undefined
       const order = await saveOrder(supabase, {
         customer_phone: customerPhone,
         items: input.items as OrderItem[],
         total: input.total as number,
         shipping_address: input.shipping_address as string,
         payment_method: input.payment_method as string,
+        customer_name: customerName,
+        source: 'whatsapp_bot',
       })
 
       if (!order) {
@@ -183,7 +313,6 @@ export async function processMessage(
 ): Promise<{ response: string; intent: Intent; requestedHuman: boolean }> {
   const client = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY })
 
-  // Construir historial de mensajes para Claude
   const messages: Anthropic.MessageParam[] = [
     ...history.map((m) => ({
       role: (m.direction === 'inbound' ? 'user' : 'assistant') as 'user' | 'assistant',
@@ -218,7 +347,6 @@ export async function processMessage(
     }
 
     if (response.stop_reason === 'tool_use') {
-      // Ejecutar las herramientas solicitadas
       const toolResults: Anthropic.ToolResultBlockParam[] = []
 
       for (const block of response.content) {
@@ -244,16 +372,13 @@ export async function processMessage(
       continue
     }
 
-    // stop_reason === 'end_turn' — extraer texto e intención
     const textBlock = response.content.find((b) => b.type === 'text')
     const fullText = textBlock?.type === 'text' ? textBlock.text : ''
 
-    // Parsear y extraer intención del marcador [INTENCION:tipo]
     const intentMatch = fullText.match(/\[INTENCION:([^\]]+)\]/)
     const rawIntent = intentMatch ? intentMatch[1].trim() : 'otro'
     const intent: Intent = isValidIntent(rawIntent) ? rawIntent : 'otro'
 
-    // Limpiar el marcador antes de enviar al cliente
     const cleanResponse = fullText.replace(/\[INTENCION:[^\]]+\]/g, '').trim()
 
     return {
@@ -263,7 +388,6 @@ export async function processMessage(
     }
   }
 
-  // Se agotaron las iteraciones
   return {
     response:
       'Tuve un problema procesando tu consulta. Por favor contáctanos en @freshco.col 🙏',

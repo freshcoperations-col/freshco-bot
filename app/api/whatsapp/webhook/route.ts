@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage, isAIPaused, setAIPaused } from '@/lib/supabase'
 import { sendWhatsAppMessage, sendWhatsAppImage, markMessageAsRead, type WhatsAppWebhookPayload } from '@/lib/whatsapp'
 import { processMessage } from '@/lib/agent'
-import { getProductsFromFirebase } from '@/lib/firebase'
+import { searchProducts } from '@/lib/products-db'
 
 // GET — Verificación del webhook de WhatsApp (Meta)
 export async function GET(request: NextRequest) {
@@ -145,17 +145,25 @@ async function processWebhook(body: unknown): Promise<void> {
             intent,
           })
 
-          // 8. Si consultó productos, enviar fotos con caption y link de compra
+          // 8. Si consultó productos, enviar fotos desde Supabase Storage
           if (intent === 'consulta_producto') {
             try {
-              const products = await getProductsFromFirebase()
-              for (const product of products) {
-                if (product.images.length > 0) {
-                  const caption = `${product.title} — $${product.price.toLocaleString('es-CO')}\n👉 Comprar: ${product.productUrl}`
-                  await sendWhatsAppImage(phone, product.images[0], caption)
-                  if (products.indexOf(product) < products.length - 1) {
-                    await new Promise((r) => setTimeout(r, 600))
-                  }
+              // Mismo catálogo que ve el agente — primeros 4 disponibles
+              const products = (await searchProducts({ only_available: true, limit: 4 }))
+              for (let i = 0; i < products.length; i++) {
+                const product = products[i]
+                if (!product.image_front_url) continue
+                const priceLine = product.on_sale && product.sale_price
+                  ? `$${product.sale_price.toLocaleString('es-CO')} (antes $${product.price.toLocaleString('es-CO')})`
+                  : `$${product.price.toLocaleString('es-CO')}`
+                const caption = `${product.name} — ${priceLine}\n👉 Ver más: ${product.product_url}`
+                try {
+                  await sendWhatsAppImage(phone, product.image_front_url, caption)
+                } catch (imgErr) {
+                  console.error(`No se pudo enviar imagen ${product.image_front_url}:`, imgErr)
+                }
+                if (i < products.length - 1) {
+                  await new Promise((r) => setTimeout(r, 600))
                 }
               }
             } catch (error) {
