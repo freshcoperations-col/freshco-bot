@@ -50,14 +50,21 @@ export interface Conversation {
   first_contact_at: string
 }
 
-// Server-side client — usa service role key para acceso completo (solo API routes)
+// Server-side client — usa service role key para acceso completo (solo API routes).
+// Forzamos cache: 'no-store' en el fetch porque Next.js 14 cachea respuestas GET
+// internas por defecto, lo que hace que los SELECT vía supabase-js devuelvan
+// datos vencidos entre requests aunque la ruta declare dynamic = 'force-dynamic'.
 export function createServerClient(): SupabaseClient {
   const url = process.env.SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !key) {
     throw new Error('Variables SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY requeridas')
   }
-  return createClient(url, key)
+  return createClient(url, key, {
+    global: {
+      fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }),
+    },
+  })
 }
 
 // Browser client — usa anon key para el dashboard (con RLS)
