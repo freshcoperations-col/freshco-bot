@@ -18,6 +18,7 @@ import {
   summarizeForAgent,
 } from './products-db'
 import { buildPaymentLink, newReference } from './wompi'
+import { sendWhatsAppImage } from './whatsapp'
 import { isValidIntent, type Intent } from './intents'
 
 // Modelo: claude-haiku-4-5 — rápido y económico, ideal para WhatsApp.
@@ -103,6 +104,22 @@ const TOOLS: Anthropic.Tool[] = [
     description:
       'Métodos de pago disponibles (Nequi, Bancolombia, link de tarjeta Wompi, contraentrega, etc.).',
     input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'send_product_images',
+    description:
+      'Envía al cliente las fotos de los productos por WhatsApp, ANTES de tu respuesta de texto. Úsalo cuando estés recomendando o mostrando 1-4 productos relevantes a su consulta. Pasa los ids de los productos (ej: "no-se-mate-el-coco"). Devuelve cuántas imágenes envió y cuáles fallaron.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        product_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Ids/slugs de los productos a mostrar (máximo 4).',
+        },
+      },
+      required: ['product_ids'],
+    },
   },
   {
     name: 'get_customer_history',
@@ -237,6 +254,34 @@ async function executeTool(
 
     case 'get_payment_methods':
       return JSON.stringify(PAYMENT_METHODS)
+
+    case 'send_product_images': {
+      const ids = ((input.product_ids as string[]) ?? []).slice(0, 4)
+      if (ids.length === 0) return JSON.stringify({ sent: 0, errors: [] })
+
+      const errors: string[] = []
+      let sent = 0
+      for (const id of ids) {
+        const product = await getProductById(id)
+        if (!product?.image_front_url) {
+          errors.push(`${id}: sin imagen`)
+          continue
+        }
+        const priceLine =
+          product.on_sale && product.sale_price
+            ? `$${product.sale_price.toLocaleString('es-CO')} (antes $${product.price.toLocaleString('es-CO')})`
+            : `$${product.price.toLocaleString('es-CO')}`
+        const caption = `${product.name} — ${priceLine}\n👉 Ver más: ${product.product_url}`
+        try {
+          await sendWhatsAppImage(customerPhone, product.image_front_url, caption)
+          sent++
+          if (sent < ids.length) await new Promise((r) => setTimeout(r, 400))
+        } catch (err) {
+          errors.push(`${id}: ${err instanceof Error ? err.message : 'error'}`)
+        }
+      }
+      return JSON.stringify({ sent, errors })
+    }
 
     case 'get_customer_history': {
       const supabase = createServerClient()

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage, isAIPaused, setAIPaused } from '@/lib/supabase'
-import { sendWhatsAppMessage, sendWhatsAppImage, markMessageAsRead, type WhatsAppWebhookPayload } from '@/lib/whatsapp'
+import { sendWhatsAppMessage, markMessageAsRead, type WhatsAppWebhookPayload } from '@/lib/whatsapp'
 import { processMessage } from '@/lib/agent'
-import { searchProducts } from '@/lib/products-db'
 
 // GET — Verificación del webhook de WhatsApp (Meta)
 export async function GET(request: NextRequest) {
@@ -156,33 +155,11 @@ async function processWebhook(body: unknown): Promise<void> {
             intent,
           })
 
-          // 8. Si consultó productos, enviar fotos desde Supabase Storage
-          if (intent === 'consulta_producto') {
-            try {
-              // Mismo catálogo que ve el agente — primeros 4 disponibles
-              const products = (await searchProducts({ only_available: true, limit: 4 }))
-              for (let i = 0; i < products.length; i++) {
-                const product = products[i]
-                if (!product.image_front_url) continue
-                const priceLine = product.on_sale && product.sale_price
-                  ? `$${product.sale_price.toLocaleString('es-CO')} (antes $${product.price.toLocaleString('es-CO')})`
-                  : `$${product.price.toLocaleString('es-CO')}`
-                const caption = `${product.name} — ${priceLine}\n👉 Ver más: ${product.product_url}`
-                try {
-                  await sendWhatsAppImage(phone, product.image_front_url, caption)
-                } catch (imgErr) {
-                  console.error(`No se pudo enviar imagen ${product.image_front_url}:`, imgErr)
-                }
-                if (i < products.length - 1) {
-                  await new Promise((r) => setTimeout(r, 600))
-                }
-              }
-            } catch (error) {
-              console.error('Error enviando imágenes:', error)
-            }
-          }
+          // (Las fotos de productos ahora las decide el agente vía send_product_images,
+          // ejecutado durante processMessage. Ya no mandamos un combo de productos
+          // pre-armado desde el webhook.)
 
-          // 9. Enviar respuesta de texto por WhatsApp
+          // 8. Enviar respuesta de texto por WhatsApp
           console.log(`[wa] enviando respuesta a ${phone} (intent=${intent}, len=${agentResponse.length})`)
           try {
             await sendWhatsAppMessage(phone, agentResponse)
@@ -197,7 +174,7 @@ async function processWebhook(body: unknown): Promise<void> {
             }
           }
 
-          // 10. Si el cliente pidió asesor: pausar AI y notificar al asesor vía ntfy
+          // 9. Si el cliente pidió asesor: pausar AI y notificar al asesor vía ntfy
           if (requestedHuman) {
             await setAIPaused(supabase, phone, true)
 
