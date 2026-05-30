@@ -101,6 +101,12 @@ async function processWebhook(body: unknown): Promise<void> {
             const media = await downloadWhatsAppMedia(msg.image.id)
             if (media) {
               inboundImage = { base64: media.base64, mimeType: media.mimeType }
+              const sizeKb = Math.round((media.base64.length * 0.75) / 1024)
+              console.log(
+                `[wa] imagen recibida de ${msg.from}: ${media.mimeType}, ~${sizeKb}KB`,
+              )
+            } else {
+              console.error(`[wa] no se pudo descargar imagen ${msg.image.id} de ${msg.from}`)
             }
           }
 
