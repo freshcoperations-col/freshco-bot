@@ -234,6 +234,7 @@ export function Dashboard() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
+          console.log('[realtime] INSERT messages', payload.new)
           const newMsg = payload.new as Message
 
           // Actualizar lista de conversaciones
@@ -245,12 +246,21 @@ export function Dashboard() {
           }
         },
       )
-      .subscribe()
+      .subscribe((status, err) => {
+        console.log('[realtime] subscribe status:', status, err ?? '')
+      })
+
+    // Fallback: si Realtime falla por cualquier razón, recargamos cada 10s.
+    const pollInterval = setInterval(() => {
+      loadConversations()
+      if (selectedPhone) loadMessages(selectedPhone)
+    }, 10000)
 
     return () => {
       supabase.removeChannel(channel)
+      clearInterval(pollInterval)
     }
-  }, [selectedPhone, loadConversations])
+  }, [selectedPhone, loadConversations, loadMessages])
 
   // ─── Responsive: solo desktop ───────────────────────────────────────────────
   const selectedConv = conversations.find((c) => c.customer_phone === selectedPhone)
