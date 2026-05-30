@@ -115,4 +115,47 @@ export interface WhatsAppMessage {
   timestamp: string
   type: string
   text?: { body: string }
+  image?: { id: string; mime_type: string; caption?: string }
+}
+
+// Descarga una imagen enviada por el cliente vía WhatsApp Cloud API.
+// Meta envía un media_id; hay que pedir la URL temporal y luego descargar
+// con el access token. Devolvemos base64 + mime_type para mandar a Claude.
+export async function downloadWhatsAppMedia(
+  mediaId: string,
+): Promise<{ base64: string; mimeType: string } | null> {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
+  if (!accessToken) {
+    console.error('downloadWhatsAppMedia: falta WHATSAPP_ACCESS_TOKEN')
+    return null
+  }
+
+  try {
+    const metaRes = await fetch(`${WHATSAPP_API_URL}/${mediaId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!metaRes.ok) {
+      console.error(`Error obteniendo media URL ${mediaId}: ${metaRes.status}`)
+      return null
+    }
+    const meta = (await metaRes.json()) as { url?: string; mime_type?: string }
+    if (!meta.url) return null
+
+    const imgRes = await fetch(meta.url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!imgRes.ok) {
+      console.error(`Error descargando media bytes ${mediaId}: ${imgRes.status}`)
+      return null
+    }
+
+    const buffer = Buffer.from(await imgRes.arrayBuffer())
+    return {
+      base64: buffer.toString('base64'),
+      mimeType: meta.mime_type ?? 'image/jpeg',
+    }
+  } catch (err) {
+    console.error(`downloadWhatsAppMedia ${mediaId} falló:`, err)
+    return null
+  }
 }

@@ -395,11 +395,17 @@ async function executeTool(
 
 // ─── Función principal del agente ─────────────────────────────────────────────
 
+export interface InboundImage {
+  base64: string
+  mimeType: string
+}
+
 export async function processMessage(
   customerPhone: string,
   message: string,
   history: Message[],
   isReturningCustomer = false,
+  image?: InboundImage,
 ): Promise<{ response: string; intent: Intent; requestedHuman: boolean }> {
   const client = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY })
 
@@ -425,12 +431,28 @@ export async function processMessage(
 
   const systemPrompt = buildSystemPrompt(isReturningCustomer, returningCtx)
 
+  const userBlocks: Anthropic.ContentBlockParam[] = []
+  if (image) {
+    userBlocks.push({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: image.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+        data: image.base64,
+      },
+    })
+  }
+  userBlocks.push({
+    type: 'text',
+    text: message || (image ? 'El cliente envió esta foto.' : ''),
+  })
+
   const messages: Anthropic.MessageParam[] = [
     ...history.map((m) => ({
       role: (m.direction === 'inbound' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: m.content,
     })),
-    { role: 'user', content: message },
+    { role: 'user', content: userBlocks },
   ]
 
   let currentMessages = messages

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage, isAIPaused, setAIPaused } from '@/lib/supabase'
-import { sendWhatsAppMessage, markMessageAsRead, type WhatsAppWebhookPayload } from '@/lib/whatsapp'
-import { processMessage } from '@/lib/agent'
+import {
+  sendWhatsAppMessage,
+  markMessageAsRead,
+  downloadWhatsAppMedia,
+  type WhatsAppWebhookPayload,
+} from '@/lib/whatsapp'
+import { processMessage, type InboundImage } from '@/lib/agent'
 
 // GET — Verificación del webhook de WhatsApp (Meta)
 export async function GET(request: NextRequest) {
@@ -72,25 +77,36 @@ async function processWebhook(body: unknown): Promise<void> {
         const messages = change.value?.messages ?? []
 
         for (const msg of messages) {
-          // Si es audio, responder pidiendo que escriba
+          // Si es audio, responder pidiendo que escriba (sin tool de voz por ahora)
           if (msg.type === 'audio') {
             await sendWhatsAppMessage(
               msg.from,
-              'Hola! Por ahora solo puedo leer mensajes de texto. Escríbeme y con gusto te ayudo 😊',
+              'Por ahora no puedo escuchar audios — escríbeme un texto o mándame una foto y con gusto te ayudo 😊',
             )
             continue
           }
 
-          // Solo procesamos mensajes de texto
-          if (msg.type !== 'text') continue
+          // Aceptamos texto e imagen. Cualquier otro tipo lo ignoramos.
+          if (msg.type !== 'text' && msg.type !== 'image') continue
 
           const phone = msg.from
-          const text = msg.text?.body ?? ''
+          const text = msg.type === 'text' ? msg.text?.body ?? '' : msg.image?.caption ?? ''
           const waMessageId = msg.id
 
-          if (!text.trim()) continue
+          if (msg.type === 'text' && !text.trim()) continue
 
-          console.log(`[wa] msg de ${phone} (id=${waMessageId}): ${text.slice(0, 80)}`)
+          // Si es imagen, descárgala desde Meta para pasarla a Claude
+          let inboundImage: InboundImage | undefined
+          if (msg.type === 'image' && msg.image?.id) {
+            const media = await downloadWhatsAppMedia(msg.image.id)
+            if (media) {
+              inboundImage = { base64: media.base64, mimeType: media.mimeType }
+            }
+          }
+
+          console.log(
+            `[wa] msg de ${phone} (id=${waMessageId}, type=${msg.type}): ${text.slice(0, 80)}`,
+          )
 
           // Verificar duplicados
           const isDuplicate = await isDuplicateMessage(supabase, waMessageId)
@@ -99,11 +115,13 @@ async function processWebhook(body: unknown): Promise<void> {
             continue
           }
 
-          // 1. Guardar mensaje entrante
+          // 1. Guardar mensaje entrante (si es imagen sin caption, dejamos placeholder)
+          const storedContent =
+            text.trim() || (inboundImage ? '[el cliente envió una foto]' : '')
           await logMessage(supabase, {
             customer_phone: phone,
             direction: 'inbound',
-            content: text,
+            content: storedContent,
             intent: 'otro',
             whatsapp_message_id: waMessageId,
           })
@@ -130,7 +148,13 @@ async function processWebhook(body: unknown): Promise<void> {
           let intent: string
           let requestedHuman = false
           try {
-            const result = await processMessage(phone, text, contextHistory, isReturningCustomer)
+            const result = await processMessage(
+              phone,
+              text,
+              contextHistory,
+              isReturningCustomer,
+              inboundImage,
+            )
             agentResponse = result.response
             intent = result.intent
             requestedHuman = result.requestedHuman
