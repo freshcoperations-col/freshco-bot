@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage, isAIPaused, setAIPaused } from '@/lib/supabase'
 import { sendWhatsAppMessage, sendWhatsAppImage, markMessageAsRead, type WhatsAppWebhookPayload } from '@/lib/whatsapp'
 import { processMessage } from '@/lib/agent'
@@ -19,7 +20,10 @@ export async function GET(request: NextRequest) {
 }
 
 // POST — Recibe mensajes de WhatsApp
-// Retorna 200 inmediatamente y procesa en background para no timeout
+// Retornamos 200 inmediatamente pero usamos waitUntil para que Vercel
+// mantenga la lambda viva hasta que termine el procesamiento async
+// (sin esto, en serverless la función puede ser matada después del
+// `return`, dejando el procesamiento a medias en los mensajes 2..N).
 export async function POST(request: NextRequest) {
   let body: unknown
   try {
@@ -28,8 +32,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ status: 'ok' })
   }
 
-  // Procesar de forma asíncrona — no bloqueamos la respuesta
-  void processWebhook(body)
+  waitUntil(processWebhook(body))
 
   return NextResponse.json({ status: 'ok' })
 }
@@ -88,9 +91,14 @@ async function processWebhook(body: unknown): Promise<void> {
 
           if (!text.trim()) continue
 
+          console.log(`[wa] msg de ${phone} (id=${waMessageId}): ${text.slice(0, 80)}`)
+
           // Verificar duplicados
           const isDuplicate = await isDuplicateMessage(supabase, waMessageId)
-          if (isDuplicate) continue
+          if (isDuplicate) {
+            console.log(`[wa] duplicado, skip ${waMessageId}`)
+            continue
+          }
 
           // 1. Guardar mensaje entrante
           await logMessage(supabase, {
@@ -106,7 +114,10 @@ async function processWebhook(body: unknown): Promise<void> {
 
           // 3. Si el AI está pausado (modo manual), no responder
           const paused = await isAIPaused(supabase, phone)
-          if (paused) continue
+          if (paused) {
+            console.log(`[wa] AI pausado para ${phone}, skip`)
+            continue
+          }
 
           // 4. Obtener historial reciente
           const history = await getRecentHistory(supabase, phone, 7)
@@ -172,8 +183,10 @@ async function processWebhook(body: unknown): Promise<void> {
           }
 
           // 9. Enviar respuesta de texto por WhatsApp
+          console.log(`[wa] enviando respuesta a ${phone} (intent=${intent}, len=${agentResponse.length})`)
           try {
             await sendWhatsAppMessage(phone, agentResponse)
+            console.log(`[wa] respuesta enviada OK a ${phone}`)
           } catch (error) {
             console.error('Error enviando mensaje WhatsApp:', error)
             await new Promise((r) => setTimeout(r, 2000))
