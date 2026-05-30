@@ -263,7 +263,10 @@ async function executeTool(
       let sent = 0
       for (const id of ids) {
         const product = await getProductById(id)
-        if (!product?.image_front_url) {
+        // Mostramos la trasera (donde va el estampado DTF). Si por algún motivo
+        // no existe la imagen trasera, caemos a la frontal.
+        const imageUrl = product?.image_back_url ?? product?.image_front_url
+        if (!product || !imageUrl) {
           errors.push(`${id}: sin imagen`)
           continue
         }
@@ -273,7 +276,7 @@ async function executeTool(
             : `$${product.price.toLocaleString('es-CO')}`
         const caption = `${product.name} — ${priceLine}\n👉 Ver más: ${product.product_url}`
         try {
-          await sendWhatsAppImage(customerPhone, product.image_front_url, caption)
+          await sendWhatsAppImage(customerPhone, imageUrl, caption)
           sent++
           if (sent < ids.length) await new Promise((r) => setTimeout(r, 400))
         } catch (err) {

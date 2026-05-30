@@ -28,6 +28,7 @@ export interface Product {
   available: boolean
   featured: boolean
   image_front_url: string | null
+  image_back_url: string | null
   product_url: string
 }
 
@@ -81,6 +82,12 @@ function productImageFrontUrl(productId: string, color: string | undefined): str
   return `${PRODUCT_IMAGES_BASE}${encodeURIComponent(`${productId}-alfrente-${slug}.png`)}`
 }
 
+function productImageBackUrl(productId: string, color: string | undefined): string | null {
+  if (!PRODUCT_IMAGES_BASE) return null
+  const slug = slugifyColor(color || 'Vainilla')
+  return `${PRODUCT_IMAGES_BASE}${encodeURIComponent(`${productId}-detras-${slug}.png`)}`
+}
+
 function productUrl(productId: string): string {
   return `${WEBPAGE_BASE_URL}/item/${productId}`
 }
@@ -112,6 +119,7 @@ function normalize(row: Record<string, unknown>): Product {
     available: row.available !== false,
     featured: !!row.featured,
     image_front_url: productImageFrontUrl(id, colors[0]),
+    image_back_url: productImageBackUrl(id, colors[0]),
     product_url: productUrl(id),
   }
 }
@@ -243,7 +251,7 @@ export function summarizeForAgent(p: Product) {
     material: p.material,
     available: p.available,
     stock: p.stock,
-    image_url: p.image_front_url,
+    image_url: p.image_back_url ?? p.image_front_url,
     url: p.product_url,
   }
 }
