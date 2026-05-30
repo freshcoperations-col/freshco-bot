@@ -242,6 +242,7 @@ export function summarizeForAgent(p: Product) {
     colors: p.colors,
     material: p.material,
     available: p.available,
+    stock: p.stock,
     image_url: p.image_front_url,
     url: p.product_url,
   }
