@@ -5,6 +5,8 @@ import { PAYMENT_METHODS } from './store-info'
 import {
   createServerClient,
   saveOrder,
+  getCustomerHistory,
+  getOrderByShortId,
   type Message,
   type OrderItem,
 } from './supabase'
@@ -101,6 +103,24 @@ const TOOLS: Anthropic.Tool[] = [
     description:
       'Métodos de pago disponibles (Nequi, Bancolombia, link de tarjeta Wompi, contraentrega, etc.).',
     input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_customer_history',
+    description:
+      'Devuelve el histórico de compras del cliente actual: cantidad de pedidos, último pedido (short_id, total, estado), talla y color favoritos. Úsalo al inicio de la conversación si el cliente es recurrente para personalizar la experiencia, o cuando el cliente pregunte por "mis pedidos".',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_order_status',
+    description:
+      'Devuelve el estado actual de una orden por su short_id (los primeros 8 caracteres del id, ej: "63AE8DB9"). Úsalo cuando el cliente pregunte por el estado de un pedido específico.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        short_id: { type: 'string', description: 'Los primeros 8 caracteres del id de la orden, sin el #.' },
+      },
+      required: ['short_id'],
+    },
   },
   {
     name: 'create_payment_link',
@@ -218,6 +238,31 @@ async function executeTool(
     case 'get_payment_methods':
       return JSON.stringify(PAYMENT_METHODS)
 
+    case 'get_customer_history': {
+      const supabase = createServerClient()
+      const history = await getCustomerHistory(supabase, customerPhone)
+      return JSON.stringify(history)
+    }
+
+    case 'get_order_status': {
+      const supabase = createServerClient()
+      const shortId = String(input.short_id ?? '')
+      const order = await getOrderByShortId(supabase, customerPhone, shortId)
+      if (!order) {
+        return JSON.stringify({ error: `No encontré ningún pedido tuyo con el id #${shortId}.` })
+      }
+      return JSON.stringify({
+        short_id: order.id.slice(0, 8).toUpperCase(),
+        payment_status: order.payment_status,
+        paid_at: order.paid_at,
+        total: order.total,
+        items: order.items,
+        shipping_address: order.shipping_address,
+        payment_method: order.payment_method,
+        created_at: order.created_at,
+      })
+    }
+
     case 'create_payment_link': {
       try {
         const items = input.items as OrderItem[]
@@ -313,6 +358,28 @@ export async function processMessage(
 ): Promise<{ response: string; intent: Intent; requestedHuman: boolean }> {
   const client = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY })
 
+  // Si es cliente recurrente, prefetch del histórico para personalizar el saludo.
+  let returningCtx
+  if (isReturningCustomer) {
+    try {
+      const supabase = createServerClient()
+      const hist = await getCustomerHistory(supabase, customerPhone)
+      if (hist.total_orders > 0) {
+        returningCtx = {
+          customer_name: hist.customer_name,
+          favorite_size: hist.favorite_size,
+          favorite_color: hist.favorite_color,
+          last_purchase_at: hist.last_purchase_at,
+          total_orders: hist.total_orders,
+        }
+      }
+    } catch (err) {
+      console.error('No se pudo prefetch customer history:', err)
+    }
+  }
+
+  const systemPrompt = buildSystemPrompt(isReturningCustomer, returningCtx)
+
   const messages: Anthropic.MessageParam[] = [
     ...history.map((m) => ({
       role: (m.direction === 'inbound' ? 'user' : 'assistant') as 'user' | 'assistant',
@@ -332,7 +399,7 @@ export async function processMessage(
       response = await client.messages.create({
         model: MODEL,
         max_tokens: MAX_TOKENS,
-        system: buildSystemPrompt(isReturningCustomer),
+        system: systemPrompt,
         messages: currentMessages,
         tools: TOOLS,
       })

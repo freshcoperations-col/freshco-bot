@@ -244,3 +244,106 @@ export async function getOrderByReference(
     .maybeSingle()
   return (data as Order | null) ?? null
 }
+
+// Busca una orden de este cliente por el short_id (#XXXXXXXX). Los UUID en
+// Postgres son lowercase, así que comparamos contra los primeros 8 chars del id.
+export async function getOrderByShortId(
+  supabase: SupabaseClient,
+  phone: string,
+  shortId: string,
+): Promise<Order | null> {
+  const normalized = shortId.toLowerCase().replace(/^#/, '').trim().slice(0, 8)
+  if (normalized.length < 4) return null
+
+  const { data } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('customer_phone', phone)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  return (data as Order[] | null)?.find((o) => o.id.toLowerCase().startsWith(normalized)) ?? null
+}
+
+export interface CustomerHistory {
+  total_orders: number
+  approved_orders: number
+  customer_name: string | null
+  last_purchase_at: string | null
+  favorite_size: string | null
+  favorite_color: string | null
+  recent_orders: {
+    short_id: string
+    total: number
+    payment_status: string
+    created_at: string
+  }[]
+}
+
+export async function getCustomerHistory(
+  supabase: SupabaseClient,
+  phone: string,
+): Promise<CustomerHistory> {
+  const { data } = await supabase
+    .from('orders')
+    .select('id, customer_name, items, total, payment_status, paid_at, created_at')
+    .eq('customer_phone', phone)
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  const rows = (data ?? []) as Array<{
+    id: string
+    customer_name: string | null
+    items: OrderItem[] | null
+    total: number
+    payment_status: string
+    paid_at: string | null
+    created_at: string
+  }>
+
+  if (rows.length === 0) {
+    return {
+      total_orders: 0,
+      approved_orders: 0,
+      customer_name: null,
+      last_purchase_at: null,
+      favorite_size: null,
+      favorite_color: null,
+      recent_orders: [],
+    }
+  }
+
+  const sizeCount: Record<string, number> = {}
+  const colorCount: Record<string, number> = {}
+  let customerName: string | null = null
+  let lastPurchase: string | null = null
+
+  for (const order of rows) {
+    if (!customerName && order.customer_name) customerName = order.customer_name
+    if (order.payment_status === 'approved') {
+      if (!lastPurchase) lastPurchase = order.paid_at ?? order.created_at
+      for (const item of order.items ?? []) {
+        if (item.size) sizeCount[item.size] = (sizeCount[item.size] ?? 0) + 1
+        if (item.color) colorCount[item.color] = (colorCount[item.color] ?? 0) + 1
+      }
+    }
+  }
+
+  const topKey = (counts: Record<string, number>) =>
+    Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+
+  return {
+    total_orders: rows.length,
+    approved_orders: rows.filter((o) => o.payment_status === 'approved').length,
+    customer_name: customerName,
+    last_purchase_at: lastPurchase,
+    favorite_size: topKey(sizeCount),
+    favorite_color: topKey(colorCount),
+    recent_orders: rows.slice(0, 5).map((o) => ({
+      short_id: o.id.slice(0, 8).toUpperCase(),
+      total: o.total,
+      payment_status: o.payment_status,
+      created_at: o.created_at,
+    })),
+  }
+}
