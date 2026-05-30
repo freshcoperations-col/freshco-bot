@@ -27,6 +27,7 @@ export interface Product {
   stock: number
   available: boolean
   featured: boolean
+  visual_tags: string[]
   image_front_url: string | null
   image_back_url: string | null
   product_url: string
@@ -118,6 +119,7 @@ function normalize(row: Record<string, unknown>): Product {
     stock: Number(row.stock ?? 0),
     available: row.available !== false,
     featured: !!row.featured,
+    visual_tags: (row.visual_tags as string[] | null) ?? [],
     image_front_url: productImageFrontUrl(id, colors[0]),
     image_back_url: productImageBackUrl(id, colors[0]),
     product_url: productUrl(id),
@@ -148,6 +150,7 @@ function textMatches(p: Product, q: string): boolean {
     p.garment_type_label ?? '',
     ...p.collection_labels,
     ...p.colors,
+    ...p.visual_tags,
   ]
     .join(' ')
     .toLowerCase()
@@ -251,6 +254,7 @@ export function summarizeForAgent(p: Product) {
     material: p.material,
     available: p.available,
     stock: p.stock,
+    visual_tags: p.visual_tags,
     image_url: p.image_back_url ?? p.image_front_url,
     url: p.product_url,
   }
