@@ -141,19 +141,26 @@ async function fetchAll(): Promise<Product[]> {
   return (data ?? []).map(normalize)
 }
 
+// Quita tildes para que "piña" matchee "pina" y viceversa.
+function stripAccents(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
+
 function textMatches(p: Product, q: string): boolean {
-  const needle = q.toLowerCase().trim()
+  const needle = stripAccents(q.toLowerCase().trim())
   if (!needle) return true
-  const hay = [
-    p.name,
-    p.description ?? '',
-    p.garment_type_label ?? '',
-    ...p.collection_labels,
-    ...p.colors,
-    ...p.visual_tags,
-  ]
-    .join(' ')
-    .toLowerCase()
+  const hay = stripAccents(
+    [
+      p.name,
+      p.description ?? '',
+      p.garment_type_label ?? '',
+      ...p.collection_labels,
+      ...p.colors,
+      ...p.visual_tags,
+    ]
+      .join(' ')
+      .toLowerCase(),
+  )
   return hay.includes(needle)
 }
 
