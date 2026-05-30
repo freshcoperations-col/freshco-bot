@@ -187,7 +187,7 @@ export function Dashboard() {
   // ─── Cargar conversaciones ──────────────────────────────────────────────────
   const loadConversations = useCallback(async () => {
     try {
-      const res = await fetch('/api/conversations')
+      const res = await fetch('/api/conversations', { cache: 'no-store' })
       if (res.ok) {
         const data = await res.json()
         setConversations(data)
@@ -202,7 +202,9 @@ export function Dashboard() {
   // ─── Cargar mensajes de un cliente ─────────────────────────────────────────
   const loadMessages = useCallback(async (phone: string) => {
     try {
-      const res = await fetch(`/api/messages?phone=${encodeURIComponent(phone)}`)
+      const res = await fetch(`/api/messages?phone=${encodeURIComponent(phone)}`, {
+        cache: 'no-store',
+      })
       if (res.ok) {
         const data = await res.json()
         setMessages(data)

@@ -23,7 +23,9 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error
 
-    return NextResponse.json(data ?? [])
+    return NextResponse.json(data ?? [], {
+      headers: { 'Cache-Control': 'no-store, max-age=0' },
+    })
   } catch (error) {
     console.error('Error obteniendo mensajes:', error)
     return NextResponse.json({ error: 'Error interno' }, { status: 500 })

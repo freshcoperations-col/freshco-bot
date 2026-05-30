@@ -82,7 +82,9 @@ export async function GET() {
       (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime(),
     )
 
-    return NextResponse.json(conversations)
+    return NextResponse.json(conversations, {
+      headers: { 'Cache-Control': 'no-store, max-age=0' },
+    })
   } catch (error) {
     console.error('Error obteniendo conversaciones:', error)
     return NextResponse.json({ error: 'Error interno' }, { status: 500 })
