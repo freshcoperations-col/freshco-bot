@@ -93,15 +93,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Código incorrecto.' }, { status: 401, headers })
   }
 
-  // Marca el OTP como usado y backfill del email en las órdenes con ese phone
-  // que no tienen ya ese email asignado.
+  // Marca el OTP como usado.
   await supabase.from('auth_otps').update({ used_at: nowIso }).eq('id', otp.id)
 
-  const { data: claimed, error: updateErr } = await supabase
+  // Cuenta total de órdenes con ese phone (independiente del email previo).
+  const { data: allOrders } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('customer_phone', phone)
+
+  // Backfill del email solo en las que no lo tenían bien.
+  const { data: updated, error: updateErr } = await supabase
     .from('orders')
     .update({ customer_email: email })
     .eq('customer_phone', phone)
-    .neq('customer_email', email) // evita rewrite si ya estaba
+    .or(`customer_email.is.null,customer_email.neq.${email}`)
     .select('id')
 
   if (updateErr) {
@@ -114,7 +120,8 @@ export async function POST(request: NextRequest) {
       verified: true,
       phone,
       email,
-      claimed: claimed?.length ?? 0,
+      total_orders: allOrders?.length ?? 0,
+      newly_linked: updated?.length ?? 0,
     },
     { headers },
   )
