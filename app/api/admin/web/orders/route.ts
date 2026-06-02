@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 import { verifyAdmin, bearerToken } from '@/lib/admin-auth'
+import { adminCors } from '@/lib/admin-cors'
 
 export const dynamic = 'force-dynamic'
+
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: adminCors(request.headers.get('origin')) })
+}
 
 // GET /api/admin/web/orders?status=pending&search=63AE8DB9&limit=50
 // Lista órdenes con filtros para el admin webapp.
 export async function GET(request: NextRequest) {
+  const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok) {
-    return NextResponse.json({ error: 'Forbidden', reason: admin.reason }, { status: 403 })
+    return NextResponse.json({ error: 'Forbidden', reason: admin.reason }, { status: 403, headers: cors })
   }
 
   const { searchParams } = new URL(request.url)
@@ -35,7 +41,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await query
 
   if (error) {
-    return NextResponse.json({ error: 'query_failed', details: error.message }, { status: 500 })
+    return NextResponse.json({ error: 'query_failed', details: error.message }, { status: 500, headers: cors })
   }
 
   interface OrderRow {
@@ -69,6 +75,6 @@ export async function GET(request: NextRequest) {
       })),
       count: rows.length,
     },
-    { headers: { 'Cache-Control': 'no-store, max-age=0' } },
+    { headers: cors },
   )
 }

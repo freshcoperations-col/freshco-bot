@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
 import { verifyAdmin, bearerToken } from '@/lib/admin-auth'
+import { adminCors } from '@/lib/admin-cors'
 
 export const dynamic = 'force-dynamic'
+
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: adminCors(request.headers.get('origin')) })
+}
 
 const CARRIER_TRACKING_URLS: Record<string, (n: string) => string> = {
   servientrega: (n) => `https://www.servientrega.com/wps/portal/rastreo-envio?guia=${encodeURIComponent(n)}`,
@@ -24,21 +29,22 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { short_id: string } },
 ) {
+  const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok) {
-    return NextResponse.json({ error: 'Forbidden', reason: admin.reason }, { status: 403 })
+    return NextResponse.json({ error: 'Forbidden', reason: admin.reason }, { status: 403, headers: cors })
   }
 
   const shortId = params.short_id?.toLowerCase().replace(/^#/, '').trim()
   if (!shortId) {
-    return NextResponse.json({ error: 'short_id requerido' }, { status: 400 })
+    return NextResponse.json({ error: 'short_id requerido' }, { status: 400, headers: cors })
   }
 
   let body: { tracking_number?: string; shipping_carrier?: string }
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json({ error: 'JSON inválido' }, { status: 400 })
+    return NextResponse.json({ error: 'JSON inválido' }, { status: 400, headers: cors })
   }
 
   const trackingNumber = body.tracking_number?.trim()
@@ -46,7 +52,7 @@ export async function POST(
   if (!trackingNumber || !carrierRaw) {
     return NextResponse.json(
       { error: 'tracking_number y shipping_carrier son requeridos' },
-      { status: 400 },
+      { status: 400, headers: cors },
     )
   }
 
@@ -60,13 +66,13 @@ export async function POST(
 
   const order = (orders ?? []).find((o) => (o.id as string).toLowerCase().startsWith(shortId))
   if (!order) {
-    return NextResponse.json({ error: `Orden #${shortId} no encontrada` }, { status: 404 })
+    return NextResponse.json({ error: `Orden #${shortId} no encontrada` }, { status: 404, headers: cors })
   }
 
   if (order.payment_status !== 'approved') {
     return NextResponse.json(
       { error: `La orden está en estado ${order.payment_status}, no se puede marcar como enviada.` },
-      { status: 409 },
+      { status: 409, headers: cors },
     )
   }
 
@@ -83,7 +89,7 @@ export async function POST(
     .eq('id', order.id)
 
   if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 })
+    return NextResponse.json({ error: updateErr.message }, { status: 500, headers: cors })
   }
 
   const firstName = (order.customer_name as string | null)?.split(' ')[0]
@@ -114,7 +120,7 @@ export async function POST(
         warning: 'Orden marcada como enviada pero falló la notificación.',
         error: err instanceof Error ? err.message : String(err),
       },
-      { status: 207 },
+      { status: 207, headers: cors },
     )
   }
 
@@ -126,6 +132,6 @@ export async function POST(
       shipping_carrier: carrierRaw,
       tracking_url: tracker ? tracker(trackingNumber) : null,
     },
-    { headers: { 'Cache-Control': 'no-store, max-age=0' } },
+    { headers: cors },
   )
 }
