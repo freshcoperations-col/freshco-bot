@@ -30,6 +30,10 @@ export interface Order {
   customer_name: string | null
   customer_email: string | null
   source: 'whatsapp_bot' | 'webpage'
+  // Tracking de envío (migration-2026-05-30-shipping.sql)
+  tracking_number: string | null
+  shipping_carrier: string | null
+  shipped_at: string | null
 }
 
 export interface OrderItem {

@@ -308,6 +308,10 @@ async function executeTool(
         shipping_address: order.shipping_address,
         payment_method: order.payment_method,
         created_at: order.created_at,
+        tracking_number: order.tracking_number,
+        shipping_carrier: order.shipping_carrier,
+        shipped_at: order.shipped_at,
+        status: order.status,
       })
     }
 
