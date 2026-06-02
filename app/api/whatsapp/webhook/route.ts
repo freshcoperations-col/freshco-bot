@@ -3,7 +3,8 @@ import { waitUntil } from '@vercel/functions'
 import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage, isAIPaused, setAIPaused } from '@/lib/supabase'
 import {
   sendWhatsAppMessage,
-  markMessageAsRead,
+  markAsReadWithTyping,
+  reactToMessage,
   downloadWhatsAppMedia,
   type WhatsAppWebhookPayload,
 } from '@/lib/whatsapp'
@@ -132,8 +133,13 @@ async function processWebhook(body: unknown): Promise<void> {
             whatsapp_message_id: waMessageId,
           })
 
-          // 2. Marcar como leído siempre
-          await markMessageAsRead(waMessageId)
+          // 2. Marcar como leído + "Freshco está escribiendo..." mientras pensamos
+          await markAsReadWithTyping(waMessageId)
+
+          // Si llegó una foto, reaccionamos con 👀 para acusar recibo instantáneo
+          if (inboundImage) {
+            void reactToMessage(phone, waMessageId, '👀')
+          }
 
           // 3. Si el AI está pausado (modo manual), no responder
           const paused = await isAIPaused(supabase, phone)

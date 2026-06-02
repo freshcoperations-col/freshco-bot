@@ -87,6 +87,68 @@ export async function markMessageAsRead(messageId: string): Promise<void> {
   }
 }
 
+// Marca como leído + activa el "Freshco está escribiendo..." en el chat del
+// cliente. El indicador desaparece automáticamente cuando enviamos el siguiente
+// mensaje o pasan ~25 segundos.
+export async function markAsReadWithTyping(messageId: string): Promise<void> {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
+
+  if (!phoneNumberId || !accessToken) return
+
+  try {
+    await fetch(`${WHATSAPP_API_URL}/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: messageId,
+        typing_indicator: { type: 'text' },
+      }),
+    })
+  } catch {
+    // No crítico
+  }
+}
+
+// Reacciona con un emoji a un mensaje del cliente — útil para acuse de recibo
+// instantáneo (ej. 👀 cuando llega una foto que vamos a procesar).
+// Pasa emoji vacío para quitar la reacción.
+export async function reactToMessage(
+  to: string,
+  messageId: string,
+  emoji: string,
+): Promise<void> {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
+
+  if (!phoneNumberId || !accessToken) return
+
+  const toClean = to.replace(/^\+/, '')
+
+  try {
+    await fetch(`${WHATSAPP_API_URL}/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: toClean,
+        type: 'reaction',
+        reaction: { message_id: messageId, emoji },
+      }),
+    })
+  } catch {
+    // No crítico
+  }
+}
+
 // Tipos del payload del webhook de Meta WhatsApp Cloud API
 export interface WhatsAppWebhookPayload {
   object: string
