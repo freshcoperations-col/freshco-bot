@@ -106,6 +106,31 @@ const TOOLS: Anthropic.Tool[] = [
     input_schema: { type: 'object', properties: {} },
   },
   {
+    name: 'modify_order',
+    description:
+      'Modifica una orden EXISTENTE de este cliente antes de que sea enviada. Solo funciona si payment_status="approved" o "pending" Y la orden NO tiene tracking_number todavía. Sirve para: cambiar talla o color de un item, cambiar la dirección de envío, o cancelar. NO usar para cambiar productos (eso requiere generar otra orden) ni para cambiar el precio.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        short_id: { type: 'string', description: 'Short id de la orden (los primeros 8 chars, ej "63AE8DB9").' },
+        change_type: {
+          type: 'string',
+          enum: ['size', 'color', 'address', 'cancel'],
+          description: 'Qué cambiar.',
+        },
+        item_index: {
+          type: 'number',
+          description: 'Índice del item a modificar (0 = primero) cuando cambias size o color. Por defecto 0.',
+        },
+        new_value: {
+          type: 'string',
+          description: 'El valor nuevo (talla nueva, color nuevo, o dirección completa nueva). Ignorado si change_type=cancel.',
+        },
+      },
+      required: ['short_id', 'change_type'],
+    },
+  },
+  {
     name: 'send_product_images',
     description:
       'Envía al cliente las fotos de los productos por WhatsApp, ANTES de tu respuesta de texto. Úsalo cuando estés recomendando o mostrando 1-4 productos relevantes a su consulta. Pasa los ids de los productos (ej: "no-se-mate-el-coco"). Devuelve cuántas imágenes envió y cuáles fallaron.',
@@ -254,6 +279,74 @@ async function executeTool(
 
     case 'get_payment_methods':
       return JSON.stringify(PAYMENT_METHODS)
+
+    case 'modify_order': {
+      const supabase = createServerClient()
+      const shortId = String(input.short_id ?? '')
+      const changeType = String(input.change_type ?? '')
+      const newValue = input.new_value ? String(input.new_value) : ''
+      const itemIndex = typeof input.item_index === 'number' ? input.item_index : 0
+
+      const order = await getOrderByShortId(supabase, customerPhone, shortId)
+      if (!order) {
+        return JSON.stringify({ error: `No encontré tu pedido #${shortId}.` })
+      }
+      if (order.tracking_number) {
+        return JSON.stringify({
+          error: `El pedido #${shortId} ya fue despachado (guía ${order.tracking_number}). No puedo modificarlo desde acá — escríbeme y te conecto con un asesor.`,
+        })
+      }
+      if (order.payment_status !== 'approved' && order.payment_status !== 'pending') {
+        return JSON.stringify({
+          error: `El pedido #${shortId} está en estado ${order.payment_status} y no se puede modificar.`,
+        })
+      }
+
+      let updatedItems = order.items
+      const patch: Record<string, unknown> = {}
+
+      if (changeType === 'size' || changeType === 'color') {
+        if (!newValue) return JSON.stringify({ error: 'Falta new_value.' })
+        const items = Array.isArray(order.items) ? [...order.items] : []
+        if (itemIndex < 0 || itemIndex >= items.length) {
+          return JSON.stringify({ error: `El item ${itemIndex} no existe en el pedido.` })
+        }
+        items[itemIndex] = { ...items[itemIndex], [changeType]: newValue }
+        updatedItems = items
+        patch.items = items
+      } else if (changeType === 'address') {
+        if (!newValue) return JSON.stringify({ error: 'Falta new_value (dirección).' })
+        patch.shipping_address = newValue
+      } else if (changeType === 'cancel') {
+        patch.status = 'cancelado'
+        if (order.payment_status === 'pending') {
+          patch.payment_status = 'voided'
+        }
+      } else {
+        return JSON.stringify({ error: `change_type inválido: ${changeType}` })
+      }
+
+      const { error: updateErr } = await supabase
+        .from('orders')
+        .update(patch)
+        .eq('id', order.id)
+      if (updateErr) {
+        return JSON.stringify({ error: `No se pudo actualizar: ${updateErr.message}` })
+      }
+
+      return JSON.stringify({
+        success: true,
+        short_id: order.id.slice(0, 8).toUpperCase(),
+        change_type: changeType,
+        updated_items: updatedItems,
+        new_address: patch.shipping_address ?? order.shipping_address,
+        new_status: patch.status ?? order.status,
+        message:
+          changeType === 'cancel'
+            ? `Pedido #${order.id.slice(0, 8).toUpperCase()} cancelado.`
+            : `Pedido #${order.id.slice(0, 8).toUpperCase()} actualizado.`,
+      })
+    }
 
     case 'send_product_images': {
       const ids = ((input.product_ids as string[]) ?? []).slice(0, 4)
