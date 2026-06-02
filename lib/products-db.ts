@@ -197,6 +197,64 @@ export async function searchProducts(filters: ProductFilters = {}): Promise<Prod
   return typeof filters.limit === 'number' ? all.slice(0, filters.limit) : all
 }
 
+// Devuelve productos ordenados por fecha de creación (más recientes primero),
+// solo disponibles. Para responder "¿qué tienen nuevo?".
+export async function getNewArrivals(limit = 5): Promise<Product[]> {
+  const supabase = createServerClient()
+  const { data, error } = await supabase
+    .from('products_full')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit * 2)
+
+  if (error) {
+    console.error('Supabase error fetching new arrivals:', error)
+    return []
+  }
+  return (data ?? [])
+    .map(normalize)
+    .filter((p) => p.available)
+    .slice(0, limit)
+}
+
+// Devuelve los productos más comprados en órdenes aprobadas. Cuenta unidades
+// agregando los items de cada orden.
+export async function getBestsellers(limit = 5): Promise<Array<Product & { units_sold: number }>> {
+  const supabase = createServerClient()
+  const { data: orders, error } = await supabase
+    .from('orders')
+    .select('items')
+    .eq('payment_status', 'approved')
+    .limit(500)
+
+  if (error) {
+    console.error('Supabase error fetching orders for bestsellers:', error)
+    return []
+  }
+
+  const counts: Record<string, number> = {}
+  for (const order of orders ?? []) {
+    const items = (order.items as Array<{ product_id?: string; quantity?: number }> | null) ?? []
+    for (const it of items) {
+      if (!it.product_id) continue
+      counts[it.product_id] = (counts[it.product_id] ?? 0) + (Number(it.quantity) || 1)
+    }
+  }
+
+  const top = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+
+  const result: Array<Product & { units_sold: number }> = []
+  for (const [id, units] of top) {
+    const p = await getProductById(id)
+    if (p && p.available) {
+      result.push({ ...p, units_sold: units })
+    }
+  }
+  return result
+}
+
 export async function getProductById(id: string): Promise<Product | null> {
   const supabase = createServerClient()
   const { data, error } = await supabase

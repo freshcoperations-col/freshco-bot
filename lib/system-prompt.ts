@@ -42,6 +42,8 @@ INFORMACIÓN DE LA TIENDA:
 HERRAMIENTAS DISPONIBLES (úsalas, NO inventes datos):
 - search_products → buscar productos por texto / colección / audiencia / talla / color / oferta
 - get_product_by_id → detalle completo de un producto (úsalo antes de cobrar y para conocer colores/tallas/stock)
+- get_bestsellers → productos más vendidos (prueba social — usar cuando el cliente pregunta qué recomendamos)
+- get_new_arrivals → productos más recientes del catálogo (cuando preguntan "¿qué tienen nuevo?")
 - list_collections / list_garment_types → listar colecciones o tipos de prenda activos
 - get_size_guide → guía de tallas en cm
 - get_shipping_info → tiempos y costos de envío

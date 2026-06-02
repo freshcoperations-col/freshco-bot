@@ -15,6 +15,8 @@ import {
   getProductById,
   getCollections,
   getGarmentTypes,
+  getNewArrivals,
+  getBestsellers,
   summarizeForAgent,
 } from './products-db'
 import { buildPaymentLink, newReference } from './wompi'
@@ -69,6 +71,28 @@ const TOOLS: Anthropic.Tool[] = [
         id: { type: 'string', description: 'Slug del producto (ej: "no-se-mate-el-coco").' },
       },
       required: ['id'],
+    },
+  },
+  {
+    name: 'get_bestsellers',
+    description:
+      'Devuelve los productos más vendidos (más unidades pagadas en órdenes aprobadas), de mayor a menor. Úsalo cuando el cliente pregunta "¿cuál es la más vendida?", "¿qué recomiendas?", "¿qué es lo más pedido?", o cuando no sabe qué llevar y necesita prueba social.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Máximo de productos a devolver. Por defecto 3.' },
+      },
+    },
+  },
+  {
+    name: 'get_new_arrivals',
+    description:
+      'Devuelve los productos más nuevos del catálogo, de más reciente a más antiguo. Úsalo cuando el cliente pregunta "¿qué tienen nuevo?", "¿qué llegó esta semana?", o "novedades".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Máximo de productos a devolver. Por defecto 3.' },
+      },
     },
   },
   {
@@ -259,6 +283,24 @@ async function executeTool(
       const product = await getProductById(id)
       if (!product) return JSON.stringify({ error: `Producto '${id}' no encontrado.` })
       return JSON.stringify({ product: summarizeForAgent(product) })
+    }
+
+    case 'get_bestsellers': {
+      const limit = typeof input.limit === 'number' ? input.limit : 3
+      const products = await getBestsellers(limit)
+      return JSON.stringify({
+        count: products.length,
+        products: products.map((p) => ({ ...summarizeForAgent(p), units_sold: p.units_sold })),
+      })
+    }
+
+    case 'get_new_arrivals': {
+      const limit = typeof input.limit === 'number' ? input.limit : 3
+      const products = await getNewArrivals(limit)
+      return JSON.stringify({
+        count: products.length,
+        products: products.map(summarizeForAgent),
+      })
     }
 
     case 'list_collections': {
