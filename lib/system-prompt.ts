@@ -116,6 +116,11 @@ PROCESO DE COMPRA — IMPORTANTE:
       - Cómo quiere pagar (opciones: link de pago Wompi — acepta tarjeta, PSE, Nequi, Bancolombia a la mano, Daviplata, Efecty y Tú llave — o Contraentrega)
       - ¿Tienes un código de descuento? (escríbelo o di que no tienes)
    b. Con los datos recibidos:
+      - Si el cliente NO proporcionó correo electrónico:
+        1. Llama get_customer_history para buscar un correo previo.
+        2. Si hay customer_email en el historial, pregunta: "¿Usamos el correo [email] que usaste antes? Con ese correo podrás hacer seguimiento de tu pedido por acá o desde freshco-design.com 📦"
+        3. Si confirma: úsalo. Si da uno nuevo: usa el nuevo. Si no tiene correo: continúa sin él.
+        4. Si no hay correo en el historial, pídelo amablemente: "¿Me das tu correo? Con él podrás rastrear tu pedido desde freshco-design.com y te llegará la confirmación. Si no tienes, avísame y seguimos sin él."
       - Si el cliente escribió un código de cupón, llama validate_coupon ANTES de hacer el resumen.
         - Si es válido: aplica el descuento al total, muestra precio original tachado y precio final. Ejemplo: "~~$70.000~~ $56.000 (20% de descuento con FRESHCODE20 🎉)"
         - Si no es válido: informa amablemente y continúa con el precio normal.

@@ -277,6 +277,7 @@ export interface CustomerHistory {
   total_orders: number
   approved_orders: number
   customer_name: string | null
+  customer_email: string | null
   last_purchase_at: string | null
   favorite_size: string | null
   favorite_color: string | null
@@ -294,7 +295,7 @@ export async function getCustomerHistory(
 ): Promise<CustomerHistory> {
   const { data } = await supabase
     .from('orders')
-    .select('id, customer_name, items, total, payment_status, paid_at, created_at')
+    .select('id, customer_name, customer_email, items, total, payment_status, paid_at, created_at')
     .eq('customer_phone', phone)
     .order('created_at', { ascending: false })
     .limit(20)
@@ -302,6 +303,7 @@ export async function getCustomerHistory(
   const rows = (data ?? []) as Array<{
     id: string
     customer_name: string | null
+    customer_email: string | null
     items: OrderItem[] | null
     total: number
     payment_status: string
@@ -314,6 +316,7 @@ export async function getCustomerHistory(
       total_orders: 0,
       approved_orders: 0,
       customer_name: null,
+      customer_email: null,
       last_purchase_at: null,
       favorite_size: null,
       favorite_color: null,
@@ -324,10 +327,12 @@ export async function getCustomerHistory(
   const sizeCount: Record<string, number> = {}
   const colorCount: Record<string, number> = {}
   let customerName: string | null = null
+  let customerEmail: string | null = null
   let lastPurchase: string | null = null
 
   for (const order of rows) {
     if (!customerName && order.customer_name) customerName = order.customer_name
+    if (!customerEmail && order.customer_email) customerEmail = order.customer_email
     if (order.payment_status === 'approved') {
       if (!lastPurchase) lastPurchase = order.paid_at ?? order.created_at
       for (const item of order.items ?? []) {
@@ -344,6 +349,7 @@ export async function getCustomerHistory(
     total_orders: rows.length,
     approved_orders: rows.filter((o) => o.payment_status === 'approved').length,
     customer_name: customerName,
+    customer_email: customerEmail,
     last_purchase_at: lastPurchase,
     favorite_size: topKey(sizeCount),
     favorite_color: topKey(colorCount),
