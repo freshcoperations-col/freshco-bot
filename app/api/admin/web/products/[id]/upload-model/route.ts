@@ -60,7 +60,7 @@ export async function POST(
   const { error } = await supabase.storage
     .from('productos')
     .upload(filename, Buffer.from(bytes), {
-      contentType: 'model/gltf-binary',
+      contentType: 'application/octet-stream',
       upsert: true,
     })
 
