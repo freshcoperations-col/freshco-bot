@@ -10,30 +10,17 @@ export const STORE_INFO = {
 
 export const PAYMENT_METHODS = [
   {
-    method: 'Nequi',
-    details: 'Número: 301 234 5678',
+    method: 'Link de pago Wompi (recomendado)',
+    details:
+      'El link de Wompi acepta: Tarjeta crédito/débito (Visa, Mastercard, Amex), ' +
+      'PSE (débito bancario), Nequi, Bancolombia a la mano, Daviplata y Efecty.',
     instructions:
-      'Realiza la transferencia y envíanos el comprobante por este mismo chat.',
-  },
-  {
-    method: 'Bancolombia',
-    details: 'Cuenta de ahorros: 123-456789-00',
-    instructions:
-      'Realiza la transferencia y envíanos el comprobante por este mismo chat.',
-  },
-  {
-    method: 'Daviplata',
-    details: 'Número: 301 234 5678',
-    instructions: 'Realiza la transferencia y envíanos el comprobante.',
+      'Te enviamos un link seguro. Pagas con el método que prefieras dentro del link. ' +
+      'La confirmación llega automáticamente.',
   },
   {
     method: 'Contraentrega',
     details: 'Disponible en Bogotá y ciudades principales.',
     instructions: 'Pagas directamente al recibir tu pedido. Sin costo adicional.',
-  },
-  {
-    method: 'Link de pago (tarjeta crédito/débito)',
-    details: 'Visa, Mastercard, American Express',
-    instructions: 'Te enviamos un link seguro para pagar con tu tarjeta.',
   },
 ]

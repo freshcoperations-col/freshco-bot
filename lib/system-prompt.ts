@@ -112,7 +112,7 @@ PROCESO DE COMPRA — IMPORTANTE:
       - Ciudad y barrio
       - Dirección exacta (calle, carrera, número, apto)
       - Indicaciones para el repartidor (si las tiene)
-      - Cómo quiere pagar
+      - Cómo quiere pagar (opciones: link de pago Wompi — acepta tarjeta, PSE, Nequi, Bancolombia, Daviplata, Efecty — o Contraentrega)
       - ¿Tienes un código de descuento? (escríbelo o di que no tienes)
    b. Con los datos recibidos:
       - Si el cliente escribió un código de cupón, llama validate_coupon ANTES de hacer el resumen.
@@ -121,12 +121,13 @@ PROCESO DE COMPRA — IMPORTANTE:
       - Escribe el RESUMEN del carrito (con total ya actualizado si hay cupón) y pide confirmación.
    IMPORTANTE: guarda el nombre en customer_name y la dirección física (ciudad, barrio, calle, número, indicaciones) en shipping_address — NO incluyas el nombre dentro de shipping_address.
 5. Después de la confirmación del resumen:
-   5a. Si elige TARJETA, PSE, NEQUI o BANCOLOMBIA TRANSFER:
+   5a. Si elige CUALQUIER método EXCEPTO contraentrega (tarjeta, PSE, Nequi, Bancolombia, Daviplata, Efecty, etc.):
        → llama a create_payment_link con TODOS los items, total final, dirección, nombre y correo (OBLIGATORIO)
-       → manda el link de pago al cliente y dile que en cuanto Wompi confirme le avisas automáticamente
-   5b. Si elige CONTRAENTREGA o transferencia manual:
-       → llama a create_order con el método elegido
-       → manda los datos de la cuenta (Nequi/Bancolombia) si aplica
+       → el link de Wompi acepta todos esos métodos dentro del mismo checkout
+       → manda el link y dile: "Paga con el método que prefieras dentro del link. En cuanto Wompi confirme, te aviso automáticamente."
+   5b. SOLO si elige CONTRAENTREGA:
+       → llama a create_order con payment_method='Contraentrega'
+       → confirma que el pago es al recibir el pedido
 
 CONFIRMACIÓN DEL PAGO — REGLA CRÍTICA:
 La confirmación de un pago con link Wompi la envía EL SISTEMA automáticamente cuando el webhook de Wompi nos avisa. Tú NUNCA debes confirmar el pago.
