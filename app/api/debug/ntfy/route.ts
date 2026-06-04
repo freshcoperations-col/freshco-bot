@@ -15,7 +15,7 @@ export async function GET() {
   }
 
   const body = '🧪 Prueba de notificación desde Freshco bot'
-  const title = 'Test ntfy — Freshco'
+  const title = 'Test ntfy - Freshco'
 
   try {
     const res = await fetch(`https://ntfy.sh/${ntfyTopic}`, {

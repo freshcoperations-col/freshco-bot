@@ -241,8 +241,8 @@ async function processWebhook(body: unknown): Promise<void> {
                 `💬 "${text}"\n\n` +
                 `👉 ${waLink}`
               const ntfyTitle = customerName
-                ? `${customerName} necesita un asesor — Freshco`
-                : `Cliente +${phone} necesita un asesor — Freshco`
+                ? `${customerName} necesita un asesor - Freshco`
+                : `Cliente +${phone} necesita un asesor - Freshco`
 
               console.log(`[ntfy] enviando a topic="${ntfyTopic}" title="${ntfyTitle}"`)
               try {
