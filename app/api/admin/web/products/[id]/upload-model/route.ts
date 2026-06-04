@@ -70,3 +70,29 @@ export async function POST(
 
   return NextResponse.json({ ok: true, filename, public_url: publicUrl }, { status: 201, headers: cors })
 }
+
+// DELETE /api/admin/web/products/[id]/upload-model?color=Vainilla&ext=glb
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const cors = adminCors(request.headers.get('origin'))
+  const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
+  if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+
+  const { searchParams } = new URL(request.url)
+  const color = searchParams.get('color')?.trim()
+  const ext = searchParams.get('ext')?.toLowerCase() || 'glb'
+
+  if (!color) return NextResponse.json({ error: 'color requerido' }, { status: 400, headers: cors })
+
+  const colorSlug = slugifyColor(color)
+  const filename = `${params.id}-3d-${colorSlug}.${ext}`
+
+  const supabase = createServerClient()
+  const { error } = await supabase.storage.from('productos').remove([filename])
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: cors })
+
+  return NextResponse.json({ ok: true, filename })
+}
