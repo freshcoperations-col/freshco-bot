@@ -172,7 +172,7 @@ export async function searchProducts(filters: ProductFilters = {}): Promise<Prod
   let all = await fetchAll()
 
   if (filters.only_available !== false) {
-    all = all.filter((p) => p.available)
+    all = all.filter((p) => p.available && !p.out_of_stock)
   }
   if (filters.garment_type) {
     all = all.filter((p) => p.garment_type === filters.garment_type)
