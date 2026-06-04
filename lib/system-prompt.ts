@@ -8,15 +8,32 @@ export interface ReturningCustomerContext {
   total_orders?: number
 }
 
+export interface SavedCustomerData {
+  name: string | null
+  email: string | null
+  address: string | null
+}
+
 export function buildSystemPrompt(
   isReturningCustomer = false,
   ctx?: ReturningCustomerContext,
+  saved?: SavedCustomerData | null,
 ): string {
   const greeting = isReturningCustomer
     ? buildReturningGreeting(ctx)
     : '¡Hola! Bienvenido a Freshco 👋 ¿En qué te puedo ayudar hoy?'
 
+  // Bloque de datos guardados del cliente (inyectado si existen compras previas)
+  const savedBlock = saved && (saved.name || saved.email || saved.address)
+    ? `\nDATOS GUARDADOS DE ESTE CLIENTE (de compras anteriores — úsalos directamente al cerrar pedido, sin pedírselos de nuevo):
+${saved.name ? `- Nombre: ${saved.name}` : ''}
+${saved.email ? `- Correo: ${saved.email}` : ''}
+${saved.address ? `- Dirección de envío: ${saved.address}` : ''}
+`.trim() + '\n'
+    : ''
+
   return `Eres el asistente virtual de ventas de Freshco por WhatsApp. Representas a ${STORE_INFO.name}, una tienda de ropa urbana en ${STORE_INFO.city}, ${STORE_INFO.country}.
+${savedBlock}
 
 PERSONALIDAD:
 - Cálido y cercano, como un asesor de moda que genuinamente quiere ayudar
@@ -107,20 +124,20 @@ PROCESO DE COMPRA — IMPORTANTE:
 2. LISTA opciones, deja al cliente elegir. Confirma color + talla.
 3. Pregunta "¿quieres agregar algo más o cerramos pedido?"
 4. Cuando el cliente quiera cerrar:
-   a. PRIMERO llama get_customer_history para ver si tiene datos guardados de compras anteriores.
+   a. Revisa si hay DATOS GUARDADOS DE ESTE CLIENTE al inicio del prompt.
 
-   CASO A — Cliente con historial (customer_name, customer_email o last_shipping_address guardados):
-   Muestra los datos que tengas en UN solo mensaje y pregunta si los usamos:
-   "¡Perfecto [nombre si lo tienes]! Tengo tus datos guardados:
-   • Nombre: [customer_name]
-   • Correo: [customer_email]
-   • Dirección: [last_shipping_address]
+   CASO A — Hay datos guardados (nombre, correo o dirección):
+   Muéstralos en UN solo mensaje y pregunta si los usamos:
+   "¡Perfecto [nombre]! Tengo tus datos guardados:
+   • Nombre: [nombre]
+   • Correo: [correo]
+   • Dirección: [dirección]
    ¿Usamos estos datos? Si quieres cambiar alguno dime cuál 😊
-   También cuéntame: ¿cómo quieres pagar esta vez? (link de pago Wompi — tarjeta, PSE, Nequi, Bancolombia, Daviplata, Efecty, Tú llave — o Contraentrega) ¿Y tienes código de descuento?"
-   → Solo muestra los campos que SÍ tienes. Si falta alguno (ej. no hay correo), pídelo en ese mismo mensaje.
-   → Si confirma: usa esos datos. Si dice que cambió algo: recibe solo lo nuevo.
+   ¿Cómo quieres pagar? (Wompi — tarjeta, PSE, Nequi, Bancolombia, Daviplata, Efecty, Tú llave — o Contraentrega) ¿Tienes cupón?"
+   → Solo muestra los campos que SÍ tienes guardados. Si falta alguno, pídelo en ese mismo mensaje.
+   → Si confirma: usa los datos guardados. Si dice que cambió algo: recibe solo lo nuevo.
 
-   CASO B — Cliente nuevo (sin historial):
+   CASO B — No hay datos guardados (cliente nuevo):
    Pide todos los datos en UN solo mensaje:
    - Nombre completo
    - Correo electrónico (para rastrear pedido en freshco-design.com — si no tiene, puede omitirlo)

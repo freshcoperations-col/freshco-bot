@@ -697,27 +697,36 @@ export async function processMessage(
 ): Promise<{ response: string; intent: Intent; requestedHuman: boolean }> {
   const client = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY })
 
-  // Si es cliente recurrente, prefetch del histórico para personalizar el saludo.
+  // Prefetch historial para TODOS los clientes — así el system prompt ya tiene
+  // nombre, correo y dirección guardados sin depender de tool use al momento justo.
   let returningCtx
-  if (isReturningCustomer) {
-    try {
-      const supabase = createServerClient()
-      const hist = await getCustomerHistory(supabase, customerPhone)
-      if (hist.total_orders > 0) {
-        returningCtx = {
-          customer_name: hist.customer_name,
-          favorite_size: hist.favorite_size,
-          favorite_color: hist.favorite_color,
-          last_purchase_at: hist.last_purchase_at,
-          total_orders: hist.total_orders,
-        }
+  let savedCustomerData: {
+    name: string | null
+    email: string | null
+    address: string | null
+  } | null = null
+  try {
+    const supabase = createServerClient()
+    const hist = await getCustomerHistory(supabase, customerPhone)
+    if (hist.total_orders > 0) {
+      returningCtx = {
+        customer_name: hist.customer_name,
+        favorite_size: hist.favorite_size,
+        favorite_color: hist.favorite_color,
+        last_purchase_at: hist.last_purchase_at,
+        total_orders: hist.total_orders,
       }
-    } catch (err) {
-      console.error('No se pudo prefetch customer history:', err)
+      savedCustomerData = {
+        name: hist.customer_name,
+        email: hist.customer_email,
+        address: hist.last_shipping_address,
+      }
     }
+  } catch (err) {
+    console.error('No se pudo prefetch customer history:', err)
   }
 
-  const systemPrompt = buildSystemPrompt(isReturningCustomer, returningCtx)
+  const systemPrompt = buildSystemPrompt(isReturningCustomer, returningCtx, savedCustomerData)
 
   const userBlocks: Anthropic.ContentBlockParam[] = []
   if (image) {
