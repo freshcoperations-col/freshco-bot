@@ -27,6 +27,7 @@ export interface Product {
   stock: number
   available: boolean
   featured: boolean
+  free_shipping: boolean
   visual_tags: string[]
   image_front_url: string | null
   image_back_url: string | null
@@ -119,6 +120,7 @@ function normalize(row: Record<string, unknown>): Product {
     stock: Number(row.stock ?? 0),
     available: row.available !== false,
     featured: !!row.featured,
+    free_shipping: !!(row.free_shipping),
     visual_tags: (row.visual_tags as string[] | null) ?? [],
     image_front_url: productImageFrontUrl(id, colors[0]),
     image_back_url: productImageBackUrl(id, colors[0]),
@@ -319,6 +321,7 @@ export function summarizeForAgent(p: Product) {
     material: p.material,
     available: p.available,
     stock: p.stock,
+    free_shipping: p.free_shipping,
     visual_tags: p.visual_tags,
     image_url: p.image_back_url ?? p.image_front_url,
     url: p.product_url,

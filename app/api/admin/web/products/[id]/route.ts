@@ -38,6 +38,7 @@ export async function PUT(
   if (body.printing_method !== undefined) patch.printing_method = body.printing_method ? String(body.printing_method) : null
   if (body.available !== undefined) patch.available = Boolean(body.available)
   if (body.featured !== undefined) patch.featured = Boolean(body.featured)
+  if (body.free_shipping !== undefined) patch.free_shipping = Boolean(body.free_shipping)
   if (body.audience !== undefined) patch.audience = String(body.audience)
   if (Array.isArray(body.visual_tags)) {
     patch.visual_tags = (body.visual_tags as unknown[])

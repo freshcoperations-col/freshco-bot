@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
     printing_method: body.printing_method ? String(body.printing_method) : null,
     available: body.available !== false,
     featured: Boolean(body.featured),
+    free_shipping: Boolean(body.free_shipping),
     audience: body.audience ? String(body.audience) : 'unisex',
   }
 
