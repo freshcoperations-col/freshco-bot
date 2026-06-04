@@ -26,6 +26,7 @@ export interface Product {
   printing_method: string | null
   stock: number
   available: boolean
+  out_of_stock: boolean
   featured: boolean
   free_shipping: boolean
   visual_tags: string[]
@@ -119,6 +120,7 @@ function normalize(row: Record<string, unknown>): Product {
     printing_method: (row.printing_method as string | null) ?? null,
     stock: Number(row.stock ?? 0),
     available: row.available !== false,
+    out_of_stock: !!(row.out_of_stock),
     featured: !!row.featured,
     free_shipping: !!(row.free_shipping),
     visual_tags: (row.visual_tags as string[] | null) ?? [],
@@ -320,6 +322,7 @@ export function summarizeForAgent(p: Product) {
     colors: p.colors,
     material: p.material,
     available: p.available,
+    out_of_stock: p.out_of_stock,
     stock: p.stock,
     free_shipping: p.free_shipping,
     visual_tags: p.visual_tags,

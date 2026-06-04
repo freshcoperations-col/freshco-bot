@@ -67,7 +67,7 @@ export async function PATCH(
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
 
-  let body: { visual_tags?: string[]; available?: boolean }
+  let body: { visual_tags?: string[]; available?: boolean; out_of_stock?: boolean }
   try { body = await request.json() } catch {
     return NextResponse.json({ error: 'JSON inválido' }, { status: 400, headers: cors })
   }
@@ -80,6 +80,7 @@ export async function PATCH(
       .slice(0, 20)
   }
   if (typeof body.available === 'boolean') patch.available = body.available
+  if (typeof body.out_of_stock === 'boolean') patch.out_of_stock = body.out_of_stock
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400, headers: cors })
   }
