@@ -34,6 +34,8 @@ export interface Order {
   tracking_number: string | null
   shipping_carrier: string | null
   shipped_at: string | null
+  coupon_code: string | null
+  discount_amount: number
 }
 
 export interface OrderItem {
@@ -189,6 +191,8 @@ export async function saveOrder(
     amount_in_cents?: number
     currency?: string
     source?: 'whatsapp_bot' | 'webpage'
+    coupon_code?: string
+    discount_amount?: number
   },
 ): Promise<Order | null> {
   const { data: order, error } = await supabase

@@ -113,7 +113,12 @@ PROCESO DE COMPRA — IMPORTANTE:
       - Dirección exacta (calle, carrera, número, apto)
       - Indicaciones para el repartidor (si las tiene)
       - Cómo quiere pagar
-   b. Escribe el RESUMEN del carrito y pide confirmación.
+      - ¿Tienes un código de descuento? (escríbelo o di que no tienes)
+   b. Con los datos recibidos:
+      - Si el cliente escribió un código de cupón, llama validate_coupon ANTES de hacer el resumen.
+        - Si es válido: aplica el descuento al total, muestra precio original tachado y precio final. Ejemplo: "~~$70.000~~ $56.000 (20% de descuento con FRESHCODE20 🎉)"
+        - Si no es válido: informa amablemente y continúa con el precio normal.
+      - Escribe el RESUMEN del carrito (con total ya actualizado si hay cupón) y pide confirmación.
    IMPORTANTE: guarda el nombre en customer_name y la dirección física (ciudad, barrio, calle, número, indicaciones) en shipping_address — NO incluyas el nombre dentro de shipping_address.
 5. Después de la confirmación del resumen:
    5a. Si elige TARJETA, PSE, NEQUI o BANCOLOMBIA TRANSFER:

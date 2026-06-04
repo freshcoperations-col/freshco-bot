@@ -215,8 +215,22 @@ const TOOLS: Anthropic.Tool[] = [
         shipping_address: { type: 'string', description: 'Dirección física de entrega: ciudad, barrio, calle/carrera, número e indicaciones. NO incluir el nombre del cliente.' },
         customer_name: { type: 'string', description: 'Nombre completo del cliente.' },
         customer_email: { type: 'string', description: 'Correo electrónico del cliente. OBLIGATORIO — necesario para asociar el pedido a su cuenta.' },
+        coupon_code: { type: 'string', description: 'Código de cupón aplicado. Solo si el cliente lo proporcionó y validate_coupon confirmó que es válido.' },
+        discount_amount: { type: 'number', description: 'Monto descontado en COP. Ya debe estar descontado del total.' },
       },
       required: ['items', 'total', 'shipping_address', 'customer_name', 'customer_email'],
+    },
+  },
+  {
+    name: 'validate_coupon',
+    description:
+      'Verifica si un código de cupón es válido y cuánto descuento aplica. NO incrementa el contador de usos — solo consulta. Llámalo cuando el cliente mencione tener un cupón o código de descuento.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'El código del cupón tal como lo escribió el cliente.' },
+      },
+      required: ['code'],
     },
   },
   {
@@ -245,6 +259,9 @@ const TOOLS: Anthropic.Tool[] = [
         shipping_address: { type: 'string' },
         payment_method: { type: 'string', description: 'Nequi, Bancolombia, Daviplata, Contraentrega.' },
         customer_name: { type: 'string' },
+        customer_email: { type: 'string', description: 'Correo electrónico del cliente.' },
+        coupon_code: { type: 'string', description: 'Código de cupón aplicado (si aplica).' },
+        discount_amount: { type: 'number', description: 'Monto descontado en COP (si aplica).' },
       },
       required: ['items', 'total', 'shipping_address', 'payment_method'],
     },
@@ -450,6 +467,36 @@ async function executeTool(
       })
     }
 
+    case 'validate_coupon': {
+      const supabase = createServerClient()
+      const code = String(input.code ?? '').trim().toUpperCase()
+      if (!code) return JSON.stringify({ valid: false, error: 'Código vacío.' })
+
+      const { data: coupon } = await supabase
+        .from('coupons')
+        .select('id, code, discount, description, active, usage_limit, used_count, expires_at')
+        .ilike('code', code)
+        .maybeSingle()
+
+      if (!coupon) return JSON.stringify({ valid: false, error: 'Código no encontrado.' })
+      if (!coupon.active) return JSON.stringify({ valid: false, error: 'Este código ya no está activo.' })
+      if (coupon.expires_at && new Date(coupon.expires_at as string) < new Date()) {
+        return JSON.stringify({ valid: false, error: 'Este código ya expiró.' })
+      }
+      if (coupon.usage_limit != null && (coupon.used_count as number) >= (coupon.usage_limit as number)) {
+        return JSON.stringify({ valid: false, error: 'Este código ya alcanzó su límite de usos.' })
+      }
+
+      return JSON.stringify({
+        valid: true,
+        coupon_id: coupon.id,
+        code: coupon.code,
+        discount_pct: Math.round((coupon.discount as number) * 100),
+        discount_decimal: coupon.discount,
+        description: coupon.description ?? '',
+      })
+    }
+
     case 'create_payment_link': {
       try {
         const items = input.items as OrderItem[]
@@ -457,6 +504,8 @@ async function executeTool(
         const shippingAddress = String(input.shipping_address)
         const customerName = String(input.customer_name)
         const customerEmail = input.customer_email ? String(input.customer_email) : undefined
+        const couponCode = input.coupon_code ? String(input.coupon_code).toUpperCase() : undefined
+        const discountAmount = input.discount_amount ? Number(input.discount_amount) : 0
         const reference = newReference(customerPhone)
         const amountInCents = Math.round(total * 100)
 
@@ -483,7 +532,24 @@ async function executeTool(
           amount_in_cents: amountInCents,
           currency: 'COP',
           source: 'whatsapp_bot',
+          coupon_code: couponCode,
+          discount_amount: discountAmount,
         })
+
+        // Incrementar used_count del cupón si se aplicó uno
+        if (couponCode && order) {
+          const { data: c } = await supabase
+            .from('coupons')
+            .select('id, used_count')
+            .ilike('code', couponCode)
+            .maybeSingle()
+          if (c) {
+            await supabase
+              .from('coupons')
+              .update({ used_count: (c.used_count as number) + 1 })
+              .eq('id', c.id)
+          }
+        }
 
         if (!order) {
           return JSON.stringify({ error: 'No se pudo guardar la orden. Intenta de nuevo.' })
@@ -509,6 +575,9 @@ async function executeTool(
     case 'create_order': {
       const supabase = createServerClient()
       const customerName = input.customer_name ? String(input.customer_name) : undefined
+      const customerEmail = input.customer_email ? String(input.customer_email) : undefined
+      const couponCode = input.coupon_code ? String(input.coupon_code).toUpperCase() : undefined
+      const discountAmount = input.discount_amount ? Number(input.discount_amount) : 0
       const order = await saveOrder(supabase, {
         customer_phone: customerPhone,
         items: input.items as OrderItem[],
@@ -516,8 +585,26 @@ async function executeTool(
         shipping_address: input.shipping_address as string,
         payment_method: input.payment_method as string,
         customer_name: customerName,
+        customer_email: customerEmail,
         source: 'whatsapp_bot',
+        coupon_code: couponCode,
+        discount_amount: discountAmount,
       })
+
+      // Incrementar used_count si se usó cupón
+      if (couponCode && order) {
+        const { data: c } = await supabase
+          .from('coupons')
+          .select('id, used_count')
+          .ilike('code', couponCode)
+          .maybeSingle()
+        if (c) {
+          await supabase
+            .from('coupons')
+            .update({ used_count: (c.used_count as number) + 1 })
+            .eq('id', c.id)
+        }
+      }
 
       if (!order) {
         return JSON.stringify({ error: 'No se pudo guardar el pedido. Intenta de nuevo.' })
