@@ -642,6 +642,20 @@ async function executeTool(
         return JSON.stringify({ error: 'No se pudo guardar el pedido. Intenta de nuevo.' })
       }
 
+      // Decrementar stock (pago manual — se asume que el cliente pagará)
+      const orderItems = input.items as Array<{ product_id?: string; quantity?: number }>
+      for (const item of orderItems) {
+        if (!item.product_id) continue
+        const supabaseStock = createServerClient()
+        const { data: prod } = await supabaseStock.from('products').select('stock').eq('id', item.product_id).maybeSingle()
+        if (prod != null) {
+          const newStock = Math.max(0, (prod.stock as number) - (item.quantity ?? 1))
+          const patch: Record<string, unknown> = { stock: newStock }
+          if (newStock === 0) patch.out_of_stock = true
+          await supabaseStock.from('products').update(patch).eq('id', item.product_id)
+        }
+      }
+
       // Email de pedido recibido (fire-and-forget)
       if (customerEmail) {
         emailOrderCreated({
