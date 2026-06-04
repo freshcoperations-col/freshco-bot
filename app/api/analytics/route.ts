@@ -1,10 +1,20 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
+import { verifyAdmin, bearerToken } from '@/lib/admin-auth'
+import { adminCors } from '@/lib/admin-cors'
 
 export const dynamic = 'force-dynamic'
 
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: adminCors(request.headers.get('origin')) })
+}
+
 // GET /api/analytics — datos agregados de ventas para el dashboard.
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const cors = adminCors(request.headers.get('origin'))
+  const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
+  if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+
   const supabase = createServerClient()
 
   const { data: orders, error } = await supabase
@@ -122,6 +132,6 @@ export async function GET() {
       top_products: topProducts,
       daily_series: dailySeries,
     },
-    { headers: { 'Cache-Control': 'no-store, max-age=0' } },
+    { headers: { ...cors, 'Cache-Control': 'no-store, max-age=0' } },
   )
 }
