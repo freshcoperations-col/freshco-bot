@@ -7,6 +7,16 @@
 
 import { createServerClient } from './supabase'
 
+export type ProductImageType = 'back' | 'front' | 'lifestyle' | 'detail' | 'flat'
+
+export interface ProductImage {
+  url: string
+  type: ProductImageType
+  color: string | null
+  label: string | null
+  sort_order: number
+}
+
 export interface Product {
   id: string
   name: string
@@ -30,6 +40,7 @@ export interface Product {
   featured: boolean
   free_shipping: boolean
   visual_tags: string[]
+  images: ProductImage[]
   image_front_url: string | null
   image_back_url: string | null
   product_url: string
@@ -101,6 +112,14 @@ function normalize(row: Record<string, unknown>): Product {
   const onSale = !!row.on_sale && salePrice != null && salePrice < price
   const colors = (row.colors as string[] | null) ?? []
   const id = String(row.id ?? '')
+  const images = (row.images as ProductImage[] | null) ?? []
+
+  // image_back_url / image_front_url: primero busca en images[], luego fallback a naming convention.
+  // Esto permite que camisetas actuales sigan funcionando y que nuevas prendas (pantalones, gorras)
+  // usen images[] directamente sin naming convention.
+  const backFromImages = images.find((img) => img.type === 'back')?.url ?? null
+  const frontFromImages = images.find((img) => img.type === 'front')?.url ?? null
+
   return {
     id,
     name: String(row.name ?? ''),
@@ -124,8 +143,9 @@ function normalize(row: Record<string, unknown>): Product {
     featured: !!row.featured,
     free_shipping: !!(row.free_shipping),
     visual_tags: (row.visual_tags as string[] | null) ?? [],
-    image_front_url: productImageFrontUrl(id, colors[0]),
-    image_back_url: productImageBackUrl(id, colors[0]),
+    images,
+    image_front_url: frontFromImages ?? productImageFrontUrl(id, colors[0]),
+    image_back_url: backFromImages ?? productImageBackUrl(id, colors[0]),
     product_url: productUrl(id),
   }
 }
