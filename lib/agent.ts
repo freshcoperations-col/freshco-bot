@@ -474,7 +474,7 @@ async function executeTool(
 
       const { data: coupon } = await supabase
         .from('coupons')
-        .select('id, code, discount, description, active, usage_limit, used_count, expires_at')
+        .select('id, code, discount, description, active, usage_limit, used_count, expires_at, one_per_customer')
         .ilike('code', code)
         .maybeSingle()
 
@@ -485,6 +485,20 @@ async function executeTool(
       }
       if (coupon.usage_limit != null && (coupon.used_count as number) >= (coupon.usage_limit as number)) {
         return JSON.stringify({ valid: false, error: 'Este código ya alcanzó su límite de usos.' })
+      }
+
+      // Verificar one_per_customer por teléfono del cliente de WhatsApp
+      if (coupon.one_per_customer) {
+        const { data: existing } = await supabase
+          .from('coupon_uses')
+          .select('id')
+          .eq('coupon_id', coupon.id)
+          .eq('customer_phone', customerPhone)
+          .limit(1)
+          .maybeSingle()
+        if (existing) {
+          return JSON.stringify({ valid: false, error: 'Este código es solo para tu primera compra y ya lo usaste anteriormente.' })
+        }
       }
 
       return JSON.stringify({
@@ -536,7 +550,7 @@ async function executeTool(
           discount_amount: discountAmount,
         })
 
-        // Incrementar used_count del cupón si se aplicó uno
+        // Registrar uso del cupón en coupon_uses (garantiza one_per_customer)
         if (couponCode && order) {
           const { data: c } = await supabase
             .from('coupons')
@@ -544,10 +558,15 @@ async function executeTool(
             .ilike('code', couponCode)
             .maybeSingle()
           if (c) {
-            await supabase
-              .from('coupons')
-              .update({ used_count: (c.used_count as number) + 1 })
-              .eq('id', c.id)
+            await Promise.all([
+              supabase.from('coupons').update({ used_count: (c.used_count as number) + 1 }).eq('id', c.id),
+              supabase.from('coupon_uses').insert({
+                coupon_id: c.id,
+                customer_phone: customerPhone,
+                customer_email: customerEmail ?? null,
+                order_id: order.id,
+              }),
+            ])
           }
         }
 

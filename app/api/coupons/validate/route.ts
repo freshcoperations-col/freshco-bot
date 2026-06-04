@@ -31,7 +31,7 @@ export async function OPTIONS(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const headers = cors(request.headers.get('origin'))
 
-  let body: { code?: string }
+  let body: { code?: string; customer_email?: string; customer_phone?: string }
   try { body = await request.json() } catch {
     return NextResponse.json({ valid: false, error: 'JSON inválido' }, { status: 400, headers })
   }
@@ -41,10 +41,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ valid: false, error: 'Código requerido' }, { status: 400, headers })
   }
 
+  const customerEmail = body.customer_email?.toString().trim().toLowerCase() || null
+  const customerPhone = body.customer_phone?.toString().trim() || null
+
   const supabase = createServerClient()
   const { data: coupon, error } = await supabase
     .from('coupons')
-    .select('id, code, discount, description, active, usage_limit, used_count, expires_at')
+    .select('id, code, discount, description, active, usage_limit, used_count, expires_at, one_per_customer')
     .eq('active', true)
     .ilike('code', code)
     .maybeSingle()
@@ -61,7 +64,31 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ valid: false, error: 'Este código ya alcanzó su límite de usos' }, { headers })
   }
 
-  // Incrementar used_count
+  // Verificar one_per_customer — si el cliente ya lo usó, rechazar
+  if (coupon.one_per_customer) {
+    let usedQuery = supabase
+      .from('coupon_uses')
+      .select('id')
+      .eq('coupon_id', coupon.id)
+
+    if (customerEmail) {
+      usedQuery = usedQuery.eq('customer_email', customerEmail)
+    } else if (customerPhone) {
+      usedQuery = usedQuery.eq('customer_phone', customerPhone)
+    }
+
+    if (customerEmail || customerPhone) {
+      const { data: existing } = await usedQuery.limit(1).maybeSingle()
+      if (existing) {
+        return NextResponse.json({
+          valid: false,
+          error: 'Este código es solo para tu primera compra y ya lo usaste anteriormente.',
+        }, { headers })
+      }
+    }
+  }
+
+  // Incrementar used_count (solo en ese momento — el uso real se graba al crear la orden)
   await supabase.from('coupons').update({ used_count: (coupon.used_count as number) + 1 }).eq('id', coupon.id)
 
   return NextResponse.json({
@@ -70,5 +97,6 @@ export async function POST(request: NextRequest) {
     discount: coupon.discount,
     discount_pct: Math.round((coupon.discount as number) * 100),
     description: coupon.description,
+    one_per_customer: coupon.one_per_customer,
   }, { headers })
 }
