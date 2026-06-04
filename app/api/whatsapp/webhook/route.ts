@@ -216,18 +216,33 @@ async function processWebhook(body: unknown): Promise<void> {
 
             const ntfyTopic = process.env.NTFY_TOPIC
             if (ntfyTopic) {
-              const waLink = `https://wa.me/${phone}?text=Hola%2C%20soy%20asesor%20de%20Freshco%20%F0%9F%91%8B%20%C2%BFCon%20qui%C3%A9n%20tengo%20el%20gusto%3F`
+              // Intentar obtener el nombre del cliente desde órdenes anteriores
+              const { data: orderData } = await supabase
+                .from('orders')
+                .select('customer_name')
+                .eq('customer_phone', phone)
+                .not('customer_name', 'is', null)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+              const customerName = (orderData as { customer_name?: string } | null)?.customer_name
+
+              const waLink = `https://wa.me/${phone}`
+              const nameLine = customerName ? `👤 ${customerName}\n` : ''
               const body =
-                `📱 +${phone}\n` +
+                `${nameLine}📱 +${phone}\n` +
                 `💬 "${text}"\n\n` +
                 `👉 ${waLink}`
+              const title = customerName
+                ? `${customerName} necesita un asesor — Freshco`
+                : `Cliente +${phone} necesita un asesor — Freshco`
               try {
                 await fetch(`https://ntfy.sh/${ntfyTopic}`, {
                   method: 'POST',
                   headers: {
-                    'Title': 'Cliente solicita asesor - Freshco',
+                    'Title': title,
                     'Priority': 'high',
-                    'Tags': 'bell',
+                    'Tags': 'bell,bust_in_silhouette',
                     'Content-Type': 'text/plain; charset=utf-8',
                   },
                   body: Buffer.from(body, 'utf-8'),
