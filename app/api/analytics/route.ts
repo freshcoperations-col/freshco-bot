@@ -19,12 +19,12 @@ export async function GET(request: NextRequest) {
 
   const { data: orders, error } = await supabase
     .from('orders')
-    .select('id, total, status, payment_status, items, created_at, customer_phone, source')
+    .select('id, total, status, payment_status, items, created_at, customer_phone, customer_email, source')
     .order('created_at', { ascending: false })
     .limit(1000)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500, headers: cors })
   }
 
   const rows = orders ?? []
@@ -32,7 +32,6 @@ export async function GET(request: NextRequest) {
   // ── KPIs ──────────────────────────────────────────────────────────────────
   const approved = rows.filter((o) => o.payment_status === 'approved')
   const totalRevenue = approved.reduce((s, o) => s + (Number(o.total) || 0), 0)
-  const avgOrderValue = approved.length > 0 ? totalRevenue / approved.length : 0
 
   const byPaymentStatus: Record<string, number> = {}
   for (const o of rows) {
@@ -76,12 +75,12 @@ export async function GET(request: NextRequest) {
     .slice(0, 5)
     .map(([id, v]) => ({ id, ...v }))
 
-  // ── Ventas por día (últimos 30 días) ──────────────────────────────────────
+  // ── Ventas por día (últimos 90 días) ──────────────────────────────────────
   const now = new Date()
   const dailyRevenue: Record<string, number> = {}
   const dailyOrders: Record<string, number> = {}
 
-  for (let i = 29; i >= 0; i--) {
+  for (let i = 89; i >= 0; i--) {
     const d = new Date(now)
     d.setDate(d.getDate() - i)
     const key = d.toISOString().slice(0, 10)
@@ -103,18 +102,17 @@ export async function GET(request: NextRequest) {
     orders: dailyOrders[date] ?? 0,
   }))
 
-  // ── Clientes únicos ───────────────────────────────────────────────────────
-  const uniqueCustomers = new Set(rows.map((o) => o.customer_phone)).size
-  const returningCustomers = new Set(
-    Object.entries(
-      rows.reduce<Record<string, number>>((acc, o) => {
-        acc[o.customer_phone] = (acc[o.customer_phone] ?? 0) + 1
-        return acc
-      }, {}),
-    )
-      .filter(([, count]) => count > 1)
-      .map(([phone]) => phone),
-  ).size
+  // ── Clientes únicos por correo ────────────────────────────────────────────
+  // Referente: email. Si no tiene email, se usa el teléfono como fallback
+  // para no perder clientes sin correo registrado.
+  const emailCount: Record<string, number> = {}
+  for (const o of rows) {
+    const key = (o.customer_email as string | null)?.toLowerCase().trim() || `phone:${o.customer_phone}`
+    emailCount[key] = (emailCount[key] ?? 0) + 1
+  }
+  const uniqueCustomers = Object.keys(emailCount).length
+  const returningCustomers = Object.values(emailCount).filter((c) => c > 1).length
+  const customersWithEmail = Object.keys(emailCount).filter((k) => !k.startsWith('phone:')).length
 
   return NextResponse.json(
     {
@@ -122,9 +120,9 @@ export async function GET(request: NextRequest) {
         total_revenue: totalRevenue,
         total_orders: rows.length,
         approved_orders: approved.length,
-        avg_order_value: avgOrderValue,
         unique_customers: uniqueCustomers,
         returning_customers: returningCustomers,
+        customers_with_email: customersWithEmail,
       },
       by_payment_status: byPaymentStatus,
       by_order_status: byOrderStatus,
