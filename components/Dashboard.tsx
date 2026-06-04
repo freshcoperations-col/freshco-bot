@@ -968,39 +968,19 @@ function CustomerDetail({
   phone,
   messages,
   conversations,
+  aiPaused,
+  onToggleAI,
+  toggling,
 }: {
   phone: string | null
   messages: Message[]
   conversations: Conversation[]
+  aiPaused: boolean
+  onToggleAI: () => void
+  toggling: boolean
 }) {
   const [copied, setCopied] = useState(false)
   const [, forceUpdate] = useState(0)
-  const [aiPaused, setAiPaused] = useState(false)
-  const [toggling, setToggling] = useState(false)
-
-  useEffect(() => {
-    if (!phone) return
-    fetch(`/api/conversations/${encodeURIComponent(phone)}/toggle`)
-      .then((r) => r.json())
-      .then((d) => setAiPaused(d.ai_paused ?? false))
-      .catch(() => {})
-  }, [phone])
-
-  async function handleToggleAI() {
-    if (!phone || toggling) return
-    setToggling(true)
-    try {
-      const res = await fetch(`/api/conversations/${encodeURIComponent(phone)}/toggle`, {
-        method: 'PUT',
-      })
-      const data = await res.json()
-      setAiPaused(data.ai_paused)
-    } catch {
-      // silencioso
-    } finally {
-      setToggling(false)
-    }
-  }
 
   useEffect(() => {
     const interval = setInterval(() => forceUpdate((n) => n + 1), 30000)
@@ -1045,7 +1025,7 @@ function CustomerDetail({
       <div className="mb-5 p-3 rounded border border-gray-200 bg-gray-50">
         <div className="text-xs text-gray-500 mb-2 font-medium">Modo de respuesta</div>
         <button
-          onClick={handleToggleAI}
+          onClick={onToggleAI}
           disabled={toggling}
           className={`w-full flex items-center justify-between px-3 py-2 rounded text-sm font-medium transition-colors ${
             aiPaused
@@ -1146,6 +1126,9 @@ export function Dashboard() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'chat' | 'pedidos' | 'productos' | 'cupones' | 'analiticas'>('chat')
+  const [aiPaused, setAiPaused] = useState(false)
+  const [toggling, setToggling] = useState(false)
+  const [customerName, setCustomerName] = useState<string | null>(null)
 
   const loadConversations = useCallback(async () => {
     try {
@@ -1175,10 +1158,41 @@ export function Dashboard() {
     }
   }, [])
 
+  async function handleToggleAI() {
+    if (!selectedPhone || toggling) return
+    setToggling(true)
+    try {
+      const res = await fetch(`/api/conversations/${encodeURIComponent(selectedPhone)}/toggle`, {
+        method: 'PUT',
+      })
+      const data = await res.json()
+      setAiPaused(data.ai_paused)
+    } catch {
+      // silencioso
+    } finally {
+      setToggling(false)
+    }
+  }
+
   function handleSelect(phone: string) {
     setSelectedPhone(phone)
     setMessages([])
+    setAiPaused(false)
+    setCustomerName(null)
     loadMessages(phone)
+    // Cargar estado de AI
+    fetch(`/api/conversations/${encodeURIComponent(phone)}/toggle`)
+      .then((r) => r.json())
+      .then((d) => setAiPaused(d.ai_paused ?? false))
+      .catch(() => {})
+    // Cargar nombre del cliente desde órdenes
+    fetch(`/api/orders?phone=${encodeURIComponent(phone)}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((orders: OrderRow[]) => {
+        const name = orders.find((o) => o.customer_name)?.customer_name ?? null
+        setCustomerName(name)
+      })
+      .catch(() => {})
   }
 
   function handleDeleteConversation(phone: string) {
@@ -1293,6 +1307,8 @@ export function Dashboard() {
                   phone={selectedPhone}
                   messages={messages}
                   firstContactAt={selectedConv?.first_contact_at}
+                  aiPaused={aiPaused}
+                  customerName={customerName}
                 />
               </div>
 
@@ -1302,6 +1318,9 @@ export function Dashboard() {
                   phone={selectedPhone}
                   messages={messages}
                   conversations={conversations}
+                  aiPaused={aiPaused}
+                  onToggleAI={handleToggleAI}
+                  toggling={toggling}
                 />
               </div>
             </>

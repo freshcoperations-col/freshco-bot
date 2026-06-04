@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { MessageBubble } from './MessageBubble'
@@ -10,15 +10,22 @@ interface ChatViewProps {
   phone: string | null
   messages: Message[]
   firstContactAt?: string
+  aiPaused?: boolean
+  customerName?: string | null
 }
 
-export function ChatView({ phone, messages, firstContactAt }: ChatViewProps) {
+export function ChatView({ phone, messages, firstContactAt, aiPaused, customerName }: ChatViewProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
 
-  // Auto-scroll al último mensaje
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    setText('')
+  }, [phone])
 
   if (!phone) {
     return (
@@ -45,10 +52,30 @@ export function ChatView({ phone, messages, firstContactAt }: ChatViewProps) {
     ? format(new Date(firstContactAt), "d 'de' MMMM yyyy", { locale: es })
     : '—'
 
+  const firstName = customerName?.split(' ')[0]
+  const greetingTemplate = firstName
+    ? `¡Hola ${firstName}! 👋 Soy tu asesor de Freshco. Estoy aquí para atenderte personalmente. ¿En qué te puedo ayudar? 💛`
+    : `¡Hola! 👋 Soy tu asesor de Freshco. Estoy aquí para atenderte personalmente. ¿En qué te puedo ayudar? 💛`
+
+  async function handleSend() {
+    if (!text.trim() || !phone || sending) return
+    setSending(true)
+    try {
+      await fetch('/api/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, message: text.trim() }),
+      })
+      setText('')
+    } finally {
+      setSending(false)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-200 bg-white">
+      <div className="px-4 py-3 border-b border-gray-200 bg-white flex-shrink-0">
         <div className="text-base font-mono font-semibold text-gray-900">+{phone}</div>
         <div className="text-xs text-gray-400 mt-0.5">
           Primer contacto: {firstContact}
@@ -72,6 +99,46 @@ export function ChatView({ phone, messages, firstContactAt }: ChatViewProps) {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* Panel de respuesta manual (solo cuando AI está pausado) */}
+      {aiPaused && (
+        <div className="border-t border-orange-200 bg-orange-50 px-4 py-3 flex-shrink-0">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-orange-600 font-medium">
+              Al pausado — tu mensaje llegará al cliente.
+            </span>
+            <button
+              onClick={() => setText(greetingTemplate)}
+              className="text-xs px-2.5 py-1 bg-white border border-orange-300 text-orange-700 rounded hover:bg-orange-100 whitespace-nowrap font-medium"
+            >
+              👋 Usar saludo
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSend()
+                }
+              }}
+              placeholder="Escribe un mensaje..."
+              className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-orange-400 bg-white"
+              disabled={sending}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!text.trim() || sending}
+              className="px-4 py-1.5 bg-orange-600 text-white text-sm font-semibold rounded hover:bg-orange-700 disabled:opacity-40"
+            >
+              {sending ? '...' : 'ENVIAR'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
