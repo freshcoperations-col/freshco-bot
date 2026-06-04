@@ -224,6 +224,7 @@ function ProductosView() {
   const [products, setProducts] = useState<ProductRow[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -250,6 +251,17 @@ function ProductosView() {
       )
     } finally {
       setBusy(null)
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setBusy(`${id}-delete`)
+    try {
+      await fetch(`/api/products/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      setProducts((prev) => prev.filter((p) => p.id !== id))
+    } finally {
+      setBusy(null)
+      setConfirmDelete(null)
     }
   }
 
@@ -280,6 +292,7 @@ function ProductosView() {
                   <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock</th>
                   <th className="text-center px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Visibilidad</th>
                   <th className="text-center px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Disponibilidad</th>
+                  <th className="px-4 py-2" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -288,6 +301,8 @@ function ProductosView() {
                   const isAgotado = product.out_of_stock || product.stock === 0
                   const busyOcultar = busy === `${product.id}-available`
                   const busyAgotado = busy === `${product.id}-out_of_stock`
+                  const busyDelete = busy === `${product.id}-delete`
+                  const isConfirmingDelete = confirmDelete === product.id
 
                   return (
                     <tr
@@ -337,6 +352,38 @@ function ProductosView() {
                             }`}
                           >
                             {busyAgotado ? '...' : product.out_of_stock ? 'Disponible' : 'Agotado'}
+                          </button>
+                        )}
+                      </td>
+
+                      {/* Eliminar */}
+                      <td className="px-4 py-3 text-center">
+                        {isConfirmingDelete ? (
+                          <div className="flex items-center gap-1.5 justify-center">
+                            <span className="text-xs text-gray-500">¿Eliminar?</span>
+                            <button
+                              onClick={() => handleDelete(product.id)}
+                              disabled={busyDelete}
+                              className="text-xs px-2 py-0.5 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                            >
+                              {busyDelete ? '...' : 'Sí'}
+                            </button>
+                            <button
+                              onClick={() => setConfirmDelete(null)}
+                              className="text-xs px-2 py-0.5 bg-gray-200 text-gray-700 rounded"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDelete(product.id)}
+                            className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                            title="Eliminar producto"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
                           </button>
                         )}
                       </td>

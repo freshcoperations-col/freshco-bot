@@ -33,3 +33,17 @@ export async function PATCH(
 
   return NextResponse.json({ ok: true, patch }, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
 }
+
+// DELETE /api/products/[id]
+// Elimina definitivamente un producto.
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const supabase = createServerClient()
+  const { error } = await supabase.from('products').delete().eq('id', params.id)
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  return NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
+}
