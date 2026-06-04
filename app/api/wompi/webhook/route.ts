@@ -126,16 +126,20 @@ async function processEvent(payload: WompiEventPayload): Promise<void> {
     }
   }
 
-  // Email de pago confirmado
+  // Email de pago confirmado (awaited para que no se corte)
   if (paymentStatus === 'approved' && order.customer_email) {
-    emailPaymentConfirmed({
-      shortId: order.id.slice(0, 8).toUpperCase(),
-      customerName: order.customer_name,
-      customerEmail: order.customer_email,
-      total: order.total,
-      items: (order.items ?? []) as never,
-      shippingAddress: order.shipping_address,
-    }).catch((e) => console.error('Email pago confirmado:', e))
+    try {
+      await emailPaymentConfirmed({
+        shortId: order.id.slice(0, 8).toUpperCase(),
+        customerName: order.customer_name,
+        customerEmail: order.customer_email,
+        total: order.total,
+        items: (order.items ?? []) as never,
+        shippingAddress: order.shipping_address,
+      })
+    } catch (e) {
+      console.error('Email pago confirmado:', e)
+    }
   }
 }
 

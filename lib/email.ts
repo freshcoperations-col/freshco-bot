@@ -11,6 +11,9 @@ function createTransporter() {
       user: process.env.EMAIL_USER ?? 'no-reply@freshco-design.com',
       pass: process.env.EMAIL_PASS,
     },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
   })
 }
 
