@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
 import { verifyAdmin, bearerToken } from '@/lib/admin-auth'
 import { adminCors } from '@/lib/admin-cors'
+import { emailOrderShipped } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,7 +61,7 @@ export async function POST(
 
   const { data: orders } = await supabase
     .from('orders')
-    .select('id, customer_phone, customer_name, total, payment_status')
+    .select('id, customer_phone, customer_email, customer_name, total, payment_status, shipping_address, items')
     .order('created_at', { ascending: false })
     .limit(200)
 
@@ -123,6 +124,18 @@ export async function POST(
       { status: 207, headers: cors },
     )
   }
+
+  // Email de envío
+  emailOrderShipped({
+    shortId: orderShort,
+    customerName: order.customer_name as string | null,
+    customerEmail: (order as Record<string, unknown>).customer_email as string | null,
+    total: Number(order.total),
+    items: ((order as Record<string, unknown>).items ?? []) as never,
+    shippingAddress: (order as Record<string, unknown>).shipping_address as string | null,
+    trackingNumber,
+    shippingCarrier: carrierRaw,
+  }).catch((e) => console.error('Email enviado:', e))
 
   return NextResponse.json(
     {

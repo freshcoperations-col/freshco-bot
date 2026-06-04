@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, updateOrderByReference, logMessage, getOrderByReference } from '@/lib/supabase'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
 import { verifyEventChecksum, mapStatus, type WompiEventPayload } from '@/lib/wompi'
+import { emailPaymentConfirmed } from '@/lib/email'
 
 // Wompi POSTea eventos a esta URL. Configurar en el dashboard de Wompi:
 //   https://comercios.wompi.co → Eventos → Webhook
@@ -104,6 +105,18 @@ async function processEvent(payload: WompiEventPayload): Promise<void> {
     })
   } catch (err) {
     console.error('Error notificando al cliente:', err)
+  }
+
+  // Email de pago confirmado
+  if (paymentStatus === 'approved' && order.customer_email) {
+    emailPaymentConfirmed({
+      shortId: order.id.slice(0, 8).toUpperCase(),
+      customerName: order.customer_name,
+      customerEmail: order.customer_email,
+      total: order.total,
+      items: (order.items ?? []) as never,
+      shippingAddress: order.shipping_address,
+    }).catch((e) => console.error('Email pago confirmado:', e))
   }
 }
 

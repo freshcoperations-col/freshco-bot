@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { emailOrderCreated } from './email'
 import { buildSystemPrompt } from './system-prompt'
 import { SIZE_GUIDE, SHIPPING_INFO, DTF_CARE } from './product-catalog'
 import { PAYMENT_METHODS } from './store-info'
@@ -574,6 +575,18 @@ async function executeTool(
           return JSON.stringify({ error: 'No se pudo guardar la orden. Intenta de nuevo.' })
         }
 
+        // Email de pedido recibido (fire-and-forget)
+        if (customerEmail) {
+          emailOrderCreated({
+            shortId: order.id.slice(0, 8).toUpperCase(),
+            customerName,
+            customerEmail,
+            total,
+            items,
+            shippingAddress: shippingAddress,
+          }).catch((e) => console.error('Email pedido recibido:', e))
+        }
+
         return JSON.stringify({
           success: true,
           order_id: order.id,
@@ -627,6 +640,18 @@ async function executeTool(
 
       if (!order) {
         return JSON.stringify({ error: 'No se pudo guardar el pedido. Intenta de nuevo.' })
+      }
+
+      // Email de pedido recibido (fire-and-forget)
+      if (customerEmail) {
+        emailOrderCreated({
+          shortId: order.id.slice(0, 8).toUpperCase(),
+          customerName,
+          customerEmail,
+          total: input.total as number,
+          items: input.items as never,
+          shippingAddress: input.shipping_address as string,
+        }).catch((e) => console.error('Email pedido recibido:', e))
       }
 
       return JSON.stringify({

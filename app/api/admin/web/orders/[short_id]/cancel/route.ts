@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
+import { emailOrderCancelled } from '@/lib/email'
 import { verifyAdmin, bearerToken } from '@/lib/admin-auth'
 import { adminCors } from '@/lib/admin-cors'
 
@@ -40,7 +41,7 @@ export async function POST(
   const supabase = createServerClient()
   const { data: orders } = await supabase
     .from('orders')
-    .select('id, customer_phone, customer_name, total, payment_status, tracking_number')
+    .select('id, customer_phone, customer_email, customer_name, total, payment_status, tracking_number, items')
     .order('created_at', { ascending: false })
     .limit(200)
 
@@ -85,6 +86,16 @@ export async function POST(
       console.error('Error notificando cancelación:', err)
     }
   }
+
+  // Email de cancelación
+  emailOrderCancelled({
+    shortId: (order.id as string).slice(0, 8).toUpperCase(),
+    customerName: order.customer_name as string | null,
+    customerEmail: (order as Record<string, unknown>).customer_email as string | null,
+    total: Number(order.total),
+    items: ((order as Record<string, unknown>).items ?? []) as never,
+    reason,
+  }).catch((e) => console.error('Email cancelado:', e))
 
   return NextResponse.json(
     { ok: true, short_id: (order.id as string).slice(0, 8).toUpperCase() },

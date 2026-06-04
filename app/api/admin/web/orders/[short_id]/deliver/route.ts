@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
+import { emailOrderDelivered } from '@/lib/email'
 import { verifyAdmin, bearerToken } from '@/lib/admin-auth'
 import { adminCors } from '@/lib/admin-cors'
 
@@ -30,7 +31,7 @@ export async function POST(
   const supabase = createServerClient()
   const { data: orders } = await supabase
     .from('orders')
-    .select('id, customer_phone, customer_name, total, status, tracking_number, shipping_carrier')
+    .select('id, customer_phone, customer_email, customer_name, total, status, tracking_number, shipping_carrier, items')
     .order('created_at', { ascending: false })
     .limit(200)
 
@@ -75,6 +76,16 @@ export async function POST(
       { status: 207, headers: cors },
     )
   }
+
+  // Email de entregado
+  emailOrderDelivered({
+    shortId: orderShort,
+    customerName: order.customer_name as string | null,
+    customerEmail: (order as Record<string, unknown>).customer_email as string | null,
+    total: Number(order.total),
+    items: ((order as Record<string, unknown>).items ?? []) as never,
+    shippingCarrier: order.shipping_carrier as string | null,
+  }).catch((e) => console.error('Email entregado:', e))
 
   return NextResponse.json({ ok: true, short_id: orderShort }, { headers: cors })
 }
