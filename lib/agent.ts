@@ -700,11 +700,7 @@ export async function processMessage(
   // Prefetch historial para TODOS los clientes — así el system prompt ya tiene
   // nombre, correo y dirección guardados sin depender de tool use al momento justo.
   let returningCtx
-  let savedCustomerData: {
-    name: string | null
-    email: string | null
-    address: string | null
-  } | null = null
+  let savedCustomerData: import('./system-prompt').SavedCustomerData | null = null
   try {
     const supabase = createServerClient()
     const hist = await getCustomerHistory(supabase, customerPhone)
@@ -716,10 +712,14 @@ export async function processMessage(
         last_purchase_at: hist.last_purchase_at,
         total_orders: hist.total_orders,
       }
+      const lastOrder = hist.recent_orders[0] ?? null
       savedCustomerData = {
         name: hist.customer_name,
         email: hist.customer_email,
         address: hist.last_shipping_address,
+        lastOrderShortId: lastOrder?.short_id ?? null,
+        lastOrderStatus: lastOrder?.payment_status ?? null,
+        lastOrderPaymentStatus: lastOrder?.payment_status ?? null,
       }
     }
   } catch (err) {

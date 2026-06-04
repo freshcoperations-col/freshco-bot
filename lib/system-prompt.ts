@@ -12,6 +12,9 @@ export interface SavedCustomerData {
   name: string | null
   email: string | null
   address: string | null
+  lastOrderShortId: string | null
+  lastOrderStatus: string | null
+  lastOrderPaymentStatus: string | null
 }
 
 export function buildSystemPrompt(
@@ -24,11 +27,12 @@ export function buildSystemPrompt(
     : '¡Hola! Bienvenido a Freshco 👋 ¿En qué te puedo ayudar hoy?'
 
   // Bloque de datos guardados del cliente (inyectado si existen compras previas)
-  const savedBlock = saved && (saved.name || saved.email || saved.address)
-    ? `\nDATOS GUARDADOS DE ESTE CLIENTE (úsalos al cerrar pedido — NO son precios ni colores de productos):
+  const savedBlock = saved && (saved.name || saved.email || saved.address || saved.lastOrderShortId)
+    ? `\nDATOS GUARDADOS DE ESTE CLIENTE (úsalos directamente — NO son precios ni colores de productos):
 ${saved.name ? `- Nombre: ${saved.name}` : ''}
 ${saved.email ? `- Correo: ${saved.email}` : ''}
 ${saved.address ? `- Dirección de envío: ${saved.address}` : ''}
+${saved.lastOrderShortId ? `- Último pedido: #${saved.lastOrderShortId} | pago=${saved.lastOrderPaymentStatus} | envío=${saved.lastOrderStatus}` : ''}
 `.trim() + '\n'
     : ''
 
@@ -180,9 +184,10 @@ CONSULTA DE PEDIDOS — short_id:
 - Cuando get_order_status devuelve tracking_number, comparte la guía con el cliente con el formato: "Tu pedido va con [shipping_carrier], guía [tracking_number]". Si tienes la fecha de despacho, mencionala.
 
 MODIFICACIÓN DE PEDIDOS:
-- Si el cliente pide cambiar talla, color, dirección o cancelar una orden (ej: "cámbiame la talla a L", "quiero cancelar el pedido", "cancela todo", "cancela el último"), usa modify_order.
-- Si el cliente NO menciona el #ID del pedido: llama get_customer_history PRIMERO para obtener el short_id del pedido más reciente (recent_orders[0].short_id), luego úsalo en modify_order.
-- ANTES de modificar, llama get_order_status con ese short_id para verificar que la orden todavía es modificable (sin tracking_number y en estado approved o pending).
+- Si el cliente pide cambiar talla, color, dirección o cancelar una orden, DEBES llamar modify_order (no basta con decirlo verbalmente — solo cuenta si llamaste la herramienta).
+- Si hay un "Último pedido" en DATOS GUARDADOS DE ESTE CLIENTE, úsalo directamente: llama modify_order con ese short_id SIN llamar get_customer_history primero.
+- Si el cliente NO da ID y no hay datos guardados: llama get_customer_history para obtener el short_id, y luego OBLIGATORIAMENTE llama modify_order con ese ID.
+- No confirmes al cliente que se canceló/modificó hasta que modify_order retorne success=true.
 - Si modify_order devuelve action_required="ESCALAR_A_ASESOR", el pedido ya fue despachado — responde EXACTAMENTE: "Ese pedido ya fue despachado, no puedo cambiarlo desde acá 🙏 En un momento un asesor de Freshco te atenderá personalmente 💛 Queda pendiente por acá." y usa OBLIGATORIAMENTE la intención solicita_asesor.
 - Si va a cambiar talla o color, primero confirma con el cliente cuál item modificar si la orden tiene varios.
 - Después de modificar exitosamente, confirma: "Listo, cambié [X] por [Y] en tu pedido #ABC123 ✅".
