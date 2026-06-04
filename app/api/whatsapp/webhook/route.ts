@@ -218,9 +218,12 @@ async function processWebhook(body: unknown): Promise<void> {
           if (requestedHuman) {
             await setAIPaused(supabase, phone, true)
 
-            const ntfyTopic = process.env.NTFY_TOPIC
-            if (ntfyTopic) {
-              // Intentar obtener el nombre del cliente desde órdenes anteriores
+            const ntfyTopic = process.env.NTFY_TOPIC?.trim()
+            console.log(`[ntfy] requestedHuman=true phone=${phone} ntfyTopic="${ntfyTopic ?? 'NO_CONFIGURADO'}"`)
+
+            if (!ntfyTopic) {
+              console.error('[ntfy] NTFY_TOPIC no está configurada en las variables de entorno — notificación no enviada')
+            } else {
               const { data: orderData } = await supabase
                 .from('orders')
                 .select('customer_name')
@@ -233,27 +236,30 @@ async function processWebhook(body: unknown): Promise<void> {
 
               const waLink = `https://wa.me/${phone}`
               const nameLine = customerName ? `👤 ${customerName}\n` : ''
-              const body =
+              const ntfyBody =
                 `${nameLine}📱 +${phone}\n` +
                 `💬 "${text}"\n\n` +
                 `👉 ${waLink}`
-              const title = customerName
+              const ntfyTitle = customerName
                 ? `${customerName} necesita un asesor — Freshco`
                 : `Cliente +${phone} necesita un asesor — Freshco`
+
+              console.log(`[ntfy] enviando a topic="${ntfyTopic}" title="${ntfyTitle}"`)
               try {
                 const ntfyRes = await fetch(`https://ntfy.sh/${ntfyTopic}`, {
                   method: 'POST',
                   headers: {
-                    'Title': title,
+                    'Title': ntfyTitle,
                     'Priority': 'high',
                     'Tags': 'bell,bust_in_silhouette',
                     'Content-Type': 'text/plain; charset=utf-8',
                   },
-                  body,
+                  body: ntfyBody,
                 })
-                console.log(`[ntfy] status=${ntfyRes.status} topic=${ntfyTopic}`)
+                const ntfyText = await ntfyRes.text()
+                console.log(`[ntfy] OK status=${ntfyRes.status} response="${ntfyText.slice(0, 80)}"`)
               } catch (error) {
-                console.error('Error enviando notificación ntfy:', error)
+                console.error('[ntfy] fetch falló:', error)
               }
             }
           }
