@@ -22,9 +22,8 @@ function corsHeaders(origin: string | null): Record<string, string> {
 
 function normalizePhone(raw: string): string | null {
   const digits = raw.replace(/\D/g, '')
-  if (digits.length === 10) return `57${digits}`
-  if (digits.length === 12 && digits.startsWith('57')) return digits
-  return null
+  if (digits.length < 7 || digits.length > 15) return null
+  return digits
 }
 
 const MAX_ATTEMPTS = 5
