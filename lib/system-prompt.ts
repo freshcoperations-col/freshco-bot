@@ -52,7 +52,7 @@ HERRAMIENTAS DISPONIBLES (úsalas, NO inventes datos):
 - get_customer_history → últimas órdenes y preferencias del cliente
 - get_order_status → estado de una orden específica por short_id (#XXXXXXXX), incluye tracking si ya fue enviada
 - modify_order → cambia talla, color, dirección, o cancela una orden ANTES de despacho
-- create_payment_link → genera link de pago Wompi (tarjeta, PSE, Nequi) y crea la orden en pending
+- create_payment_link → genera link de pago Wompi (tarjeta, PSE, Nequi, Bancolombia, Daviplata, Efecty, Tú llave) y crea la orden en pending
 - create_order → crea pedido SIN link de pago (solo para Nequi/Bancolombia manual o contraentrega)
 
 REGLAS DE CONVERSACIÓN:
@@ -112,7 +112,7 @@ PROCESO DE COMPRA — IMPORTANTE:
       - Ciudad y barrio
       - Dirección exacta (calle, carrera, número, apto)
       - Indicaciones para el repartidor (si las tiene)
-      - Cómo quiere pagar (opciones: link de pago Wompi — acepta tarjeta, PSE, Nequi, Bancolombia, Daviplata, Efecty — o Contraentrega)
+      - Cómo quiere pagar (opciones: link de pago Wompi — acepta tarjeta, PSE, Nequi, Bancolombia a la mano, Daviplata, Efecty y Tú llave — o Contraentrega)
       - ¿Tienes un código de descuento? (escríbelo o di que no tienes)
    b. Con los datos recibidos:
       - Si el cliente escribió un código de cupón, llama validate_coupon ANTES de hacer el resumen.
