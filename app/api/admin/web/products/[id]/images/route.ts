@@ -38,15 +38,28 @@ export async function POST(
     return NextResponse.json({ error: `type debe ser uno de: ${IMAGE_TYPES.join(', ')}` }, { status: 400, headers: cors })
   }
 
+  const ACCENT_FROM = 'ÁÉÍÓÚÜÑáéíóúüñ'
+  const ACCENT_TO   = 'AEIOUUNaeiouun'
+  function slugifyColor(c: string): string {
+    let out = ''
+    for (const ch of c) {
+      const i = ACCENT_FROM.indexOf(ch)
+      out += i >= 0 ? ACCENT_TO[i] : ch
+    }
+    return out.toLowerCase().trim().replace(/\s+/g, '-')
+  }
+
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-  const filename = `${params.id}-${type}${color ? `-${color.toLowerCase().replace(/\s+/g, '-')}` : ''}-${Date.now()}.${ext}`
+  const colorSlug = color ? `-${slugifyColor(color)}` : ''
+  // Convención: {id}-{type}-{color-slug}.{ext} o {id}-{type}.{ext} sin color
+  const filename = `${params.id}-${type}${colorSlug}.${ext}`
 
   const bytes = await file.arrayBuffer()
   const supabase = createServerClient()
 
   const { error: uploadErr } = await supabase.storage
     .from('productos')
-    .upload(filename, Buffer.from(bytes), { contentType: file.type || 'image/jpeg', upsert: false })
+    .upload(filename, Buffer.from(bytes), { contentType: file.type || 'image/jpeg', upsert: true })
 
   if (uploadErr) return NextResponse.json({ error: uploadErr.message }, { status: 500, headers: cors })
 
