@@ -140,13 +140,13 @@ export function ConversationList({
                       </p>
                     </div>
 
-                    {/* Botón eliminar (aparece al hacer hover) */}
+                    {/* Botón eliminar */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
                         setConfirmPhone(conv.customer_phone)
                       }}
-                      className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 text-gray-300 hover:text-red-500 transition-opacity"
+                      className="flex-shrink-0 p-1 text-gray-300 hover:text-red-500 transition-colors"
                       title="Eliminar conversación"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
