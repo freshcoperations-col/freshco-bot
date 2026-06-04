@@ -234,12 +234,10 @@ async function processWebhook(body: unknown): Promise<void> {
                 .maybeSingle()
               const customerName = (orderData as { customer_name?: string } | null)?.customer_name
 
-              const waLink = `https://wa.me/${phone}`
               const nameLine = customerName ? `👤 ${customerName}\n` : ''
               const ntfyBody =
                 `${nameLine}📱 +${phone}\n` +
-                `💬 "${text}"\n\n` +
-                `👉 ${waLink}`
+                `💬 "${text}"`
               const ntfyTitle = customerName
                 ? `${customerName} necesita un asesor - Freshco`
                 : `Cliente +${phone} necesita un asesor - Freshco`
