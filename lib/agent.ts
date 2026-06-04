@@ -353,7 +353,8 @@ async function executeTool(
       }
       if (order.tracking_number) {
         return JSON.stringify({
-          error: `El pedido #${shortId} ya fue despachado (guía ${order.tracking_number}). No puedo modificarlo desde acá — escríbeme y te conecto con un asesor.`,
+          error: `El pedido #${shortId} ya fue despachado (guía ${order.tracking_number}). No puedo modificarlo desde acá.`,
+          action_required: 'ESCALAR_A_ASESOR',
         })
       }
       if (order.payment_status !== 'approved' && order.payment_status !== 'pending') {

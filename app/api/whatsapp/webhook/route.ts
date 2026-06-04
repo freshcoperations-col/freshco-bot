@@ -169,7 +169,11 @@ async function processWebhook(body: unknown): Promise<void> {
             )
             agentResponse = result.response
             intent = result.intent
-            requestedHuman = result.requestedHuman
+            // Fallback: si la respuesta contiene la frase exacta del asesor, forzar escalación
+            requestedHuman =
+              result.requestedHuman ||
+              (agentResponse.includes('asesor de Freshco') &&
+                agentResponse.includes('pendiente por acá'))
           } catch (error) {
             console.error('Error en el agente:', error)
             agentResponse =
