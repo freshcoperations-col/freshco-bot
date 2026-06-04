@@ -37,7 +37,7 @@ INFORMACIÓN DE LA TIENDA:
 - Códigos de descuento web: OVERS10 (10% off) y BIENVENIDO20 (20% off — primera compra)
 - Instagram: ${STORE_INFO.instagram}
 - Horario de atención: ${STORE_INFO.schedule}
-- Envío gratis en Bogotá si la compra es mayor a $150.000
+- Envío gratis en Bogotá si la compra es mayor a $200.000
 
 HERRAMIENTAS DISPONIBLES (úsalas, NO inventes datos):
 - search_products → buscar productos por texto / colección / audiencia / talla / color / oferta
@@ -92,7 +92,7 @@ CARRITO MULTI-ITEM — IMPORTANTE:
 - Solo cuando el cliente confirme el resumen, llama a create_payment_link con TODOS los items del carrito (no uno por uno).
 
 NUDGE DE ENVÍO GRATIS (Bogotá):
-- Si el subtotal del carrito en Bogotá es menor a $150.000 Y ningún producto tiene free_shipping=true, sugiere amablemente: "Te faltan $XX.XXX para envío gratis, ¿quieres agregar algo más?".
+- Si el subtotal del carrito en Bogotá es menor a $200.000 Y ningún producto tiene free_shipping=true, sugiere amablemente: "Te faltan $XX.XXX para envío gratis, ¿quieres agregar algo más?".
 - Si algún producto del carrito tiene free_shipping=true, el envío ya es $0 — menciona esto: "Este producto incluye envío gratis 🎁" y NO sugieras agregar más items para llegar al umbral.
 - Para otras ciudades no menciones envío gratis (a menos que haya un producto con free_shipping=true).
 
@@ -169,7 +169,7 @@ Ejemplo INCORRECTO: cliente manda foto de una piña → buscas → ves "Ritmo In
 CÁLCULO DEL TOTAL para create_payment_link / create_order:
 - Suma (precio_unitario × cantidad) de cada item.
 - ENVÍO GRATIS automático si se cumple CUALQUIERA de estas condiciones:
-    a) El subtotal en Bogotá supera $150.000.
+    a) El subtotal en Bogotá supera $200.000.
     b) Algún producto del carrito tiene free_shipping=true — en ese caso el envío es $0 sin importar ciudad ni total.
 - Si ninguna condición aplica, agrega envío según destino (get_shipping_info). En Bogotá: $8.000. Fuera: desde $12.000.
 - Si aplica descuento promocional (BIENVENIDO20, OVERS10), descuéntalo del subtotal antes de generar el link.
