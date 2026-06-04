@@ -25,7 +25,7 @@ export function buildSystemPrompt(
 
   // Bloque de datos guardados del cliente (inyectado si existen compras previas)
   const savedBlock = saved && (saved.name || saved.email || saved.address)
-    ? `\nDATOS DE ENVÍO GUARDADOS (solo para el paso de cierre de pedido — NO uses estos datos como precios ni disponibilidad de productos):
+    ? `\nDATOS GUARDADOS DE ESTE CLIENTE (úsalos al cerrar pedido — NO son precios ni colores de productos):
 ${saved.name ? `- Nombre: ${saved.name}` : ''}
 ${saved.email ? `- Correo: ${saved.email}` : ''}
 ${saved.address ? `- Dirección de envío: ${saved.address}` : ''}
