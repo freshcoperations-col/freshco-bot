@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient()
   const { data, error } = await supabase
     .from('products_full')
-    .select('id, name, description, price, sale_price, on_sale, stock, available, featured, free_shipping, colors, sizes, collections, collection_labels, garment_type, garment_type_label, material, printing_method, visual_tags, audience, created_at')
+    .select('id, name, description, price, sale_price, on_sale, stock, available, out_of_stock, featured, free_shipping, colors, sizes, collections, collection_labels, garment_type, garment_type_label, material, printing_method, visual_tags, audience, created_at')
     .order('created_at', { ascending: false })
 
   if (error) {
