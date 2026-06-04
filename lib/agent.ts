@@ -383,6 +383,29 @@ async function executeTool(
         if (order.payment_status === 'pending') {
           patch.payment_status = 'voided'
         }
+        // Re-incrementar stock si era orden manual (Contraentrega) no enviada
+        // Las órdenes Wompi decrementan solo en el webhook de pago aprobado,
+        // así que no hay que re-incrementar en ese caso.
+        const isManualOrder = order.payment_method === 'Contraentrega' ||
+          (order.payment_method != null && !order.payment_method.toLowerCase().includes('wompi'))
+        if (isManualOrder && !order.tracking_number) {
+          for (const item of (order.items ?? [])) {
+            const itemTyped = item as { product_id?: string; quantity?: number }
+            if (!itemTyped.product_id) continue
+            const { data: prod } = await supabase
+              .from('products')
+              .select('stock')
+              .eq('id', itemTyped.product_id)
+              .maybeSingle()
+            if (prod != null) {
+              const restoredStock = (prod.stock as number) + (itemTyped.quantity ?? 1)
+              await supabase
+                .from('products')
+                .update({ stock: restoredStock, out_of_stock: false })
+                .eq('id', itemTyped.product_id)
+            }
+          }
+        }
       } else {
         return JSON.stringify({ error: `change_type inválido: ${changeType}` })
       }
