@@ -22,13 +22,11 @@ function corsHeaders(origin: string | null): Record<string, string> {
   }
 }
 
-// Acepta cualquier número de teléfono internacional (E.164 sin el +).
-// Ej: "3123425535" → "3123425535" (Colombia sin código, se manda tal cual),
-//     "+57 312 342 5535" → "573123425535",
-//     "+1 202 555 1234" → "12025551234" (USA).
-// WhatsApp Cloud API acepta números con código de país directamente.
+// Normaliza a E.164 sin el + (formato que usa WhatsApp Cloud API y la DB).
+// Números colombianos de 10 dígitos que empiecen en 3 → agrega prefijo 57.
 function normalizePhone(raw: string): string | null {
   const digits = raw.replace(/\D/g, '')
+  if (digits.length === 10 && digits.startsWith('3')) return '57' + digits
   if (digits.length < 7 || digits.length > 15) return null
   return digits
 }
