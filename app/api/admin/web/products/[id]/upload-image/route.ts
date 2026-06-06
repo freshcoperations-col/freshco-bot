@@ -95,8 +95,26 @@ export async function DELETE(
   const filename = `${params.id}-${prefix}-${slugifyColor(color)}.png`
 
   const supabase = createServerClient()
-  const { error } = await supabase.storage.from('productos').remove([filename])
+
+  // Primero verificar que el archivo existe listando el directorio raíz
+  const { data: list, error: listError } = await supabase.storage
+    .from('productos')
+    .list('', { search: filename })
+
+  console.log('[upload-image DELETE] filename:', filename, 'found:', list?.length, 'listError:', listError?.message)
+
+  if (listError) return NextResponse.json({ error: listError.message }, { status: 500, headers: cors })
+  if (!list || list.length === 0) {
+    return NextResponse.json({ error: `Archivo no encontrado: ${filename}`, filename }, { status: 404, headers: cors })
+  }
+
+  const { data, error } = await supabase.storage.from('productos').remove([filename])
+  console.log('[upload-image DELETE] remove result:', data, 'error:', error?.message)
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: cors })
+  if (!data || data.length === 0) {
+    return NextResponse.json({ error: `No se pudo eliminar: ${filename}`, filename }, { status: 500, headers: cors })
+  }
 
   return NextResponse.json({ ok: true, filename }, { headers: cors })
 }
