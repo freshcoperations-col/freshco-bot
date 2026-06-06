@@ -176,6 +176,7 @@ function textMatches(p: Product, q: string): boolean {
   const hay = stripAccents(
     [
       p.name,
+      p.id.replace(/-/g, ' '),   // "que-fluya" → "que fluya"
       p.description ?? '',
       p.garment_type_label ?? '',
       ...p.collection_labels,
