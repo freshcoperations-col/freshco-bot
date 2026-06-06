@@ -70,6 +70,9 @@ export async function POST(
 
   const { data: { publicUrl } } = supabase.storage.from('productos').getPublicUrl(filename)
 
+  // Actualizar updated_at para invalidar el cache del browser en la webpage
+  await supabase.from('products').update({ updated_at: new Date().toISOString() }).eq('id', params.id)
+
   return NextResponse.json({ ok: true, filename, public_url: publicUrl }, { status: 201, headers: cors })
 }
 
@@ -97,6 +100,9 @@ export async function DELETE(
   const supabase = createServerClient()
   const { error } = await supabase.storage.from('productos').remove([filename])
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: cors })
+
+  // Actualizar updated_at para que el cache-busting ?v= funcione en la webpage
+  await supabase.from('products').update({ updated_at: new Date().toISOString() }).eq('id', params.id)
 
   return NextResponse.json({ ok: true, filename }, { headers: cors })
 }
