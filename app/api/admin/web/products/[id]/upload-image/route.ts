@@ -72,3 +72,31 @@ export async function POST(
 
   return NextResponse.json({ ok: true, filename, public_url: publicUrl }, { status: 201, headers: cors })
 }
+
+// DELETE /api/admin/web/products/[id]/upload-image?color=Vainilla&side=frente
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const cors = adminCors(request.headers.get('origin'))
+  const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
+  if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+
+  const { searchParams } = new URL(request.url)
+  const color = searchParams.get('color')?.trim()
+  const side = searchParams.get('side')?.trim()
+
+  if (!color) return NextResponse.json({ error: 'color es requerido' }, { status: 400, headers: cors })
+  if (side !== 'frente' && side !== 'detras') {
+    return NextResponse.json({ error: 'side debe ser "frente" o "detras"' }, { status: 400, headers: cors })
+  }
+
+  const prefix = side === 'frente' ? 'alfrente' : 'detras'
+  const filename = `${params.id}-${prefix}-${slugifyColor(color)}.png`
+
+  const supabase = createServerClient()
+  const { error } = await supabase.storage.from('productos').remove([filename])
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: cors })
+
+  return NextResponse.json({ ok: true, filename }, { headers: cors })
+}
