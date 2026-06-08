@@ -9,7 +9,7 @@ export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, { status: 204, headers: adminCors(request.headers.get('origin')) })
 }
 
-// GET /api/admin/web/inventory — devuelve todas las filas del inventario global
+// GET /api/admin/web/inventory
 export async function GET(request: NextRequest) {
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
@@ -18,7 +18,8 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient()
   const { data, error } = await supabase
     .from('global_inventory')
-    .select('id, size, color, quantity, updated_at')
+    .select('id, garment_type, size, color, quantity, updated_at')
+    .order('garment_type')
     .order('color')
     .order('size')
 
@@ -28,18 +29,18 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/admin/web/inventory
-// Body: { size: string, color: string, quantity: number }
-// Upserta (crea o actualiza) una fila del inventario global.
+// Body: { garment_type: string, size: string, color: string, quantity: number }
 export async function POST(request: NextRequest) {
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
 
-  let body: { size?: string; color?: string; quantity?: number }
+  let body: { garment_type?: string; size?: string; color?: string; quantity?: number }
   try { body = await request.json() } catch {
     return NextResponse.json({ error: 'JSON inválido' }, { status: 400, headers: cors })
   }
 
+  const garment_type = body.garment_type?.trim() ?? ''
   const size = body.size?.trim()
   const color = body.color?.trim()
   const quantity = Math.max(0, Number(body.quantity) || 0)
@@ -51,7 +52,10 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient()
   const { data, error } = await supabase
     .from('global_inventory')
-    .upsert({ size, color, quantity, updated_at: new Date().toISOString() }, { onConflict: 'size,color' })
+    .upsert(
+      { garment_type, size, color, quantity, updated_at: new Date().toISOString() },
+      { onConflict: 'garment_type,size,color' },
+    )
     .select()
     .single()
 
@@ -61,17 +65,18 @@ export async function POST(request: NextRequest) {
 }
 
 // DELETE /api/admin/web/inventory
-// Body: { size: string, color: string }
+// Body: { garment_type?: string, size: string, color: string }
 export async function DELETE(request: NextRequest) {
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
 
-  let body: { size?: string; color?: string }
+  let body: { garment_type?: string; size?: string; color?: string }
   try { body = await request.json() } catch {
     return NextResponse.json({ error: 'JSON inválido' }, { status: 400, headers: cors })
   }
 
+  const garment_type = body.garment_type?.trim() ?? ''
   const size = body.size?.trim()
   const color = body.color?.trim()
   if (!size || !color) {
@@ -82,6 +87,7 @@ export async function DELETE(request: NextRequest) {
   const { error } = await supabase
     .from('global_inventory')
     .delete()
+    .eq('garment_type', garment_type)
     .eq('size', size)
     .eq('color', color)
 

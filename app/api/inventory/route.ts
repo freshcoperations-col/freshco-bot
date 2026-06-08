@@ -3,19 +3,21 @@ import { createServerClient } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-// GET /api/inventory — público, usado por la webpage para conocer el stock global por talla+color.
-// Retorna todas las combinaciones con su cantidad disponible.
+// GET /api/inventory — público, usado por la webpage para conocer el stock global.
+// Retorna todas las combinaciones con garment_type, size, color y quantity.
 // quantity === 0 significa agotado para esa combinación.
+// garment_type vacío ('') aplica a todos los tipos de prenda (legacy).
 export async function GET() {
   const supabase = createServerClient()
   const { data } = await supabase
     .from('global_inventory')
-    .select('size, color, quantity')
+    .select('garment_type, size, color, quantity')
+    .order('garment_type')
     .order('color')
     .order('size')
 
   return NextResponse.json(
-    { inventory: (data ?? []) as Array<{ size: string; color: string; quantity: number }> },
+    { inventory: (data ?? []) as Array<{ garment_type: string; size: string; color: string; quantity: number }> },
     {
       headers: {
         'Cache-Control': 'no-store',

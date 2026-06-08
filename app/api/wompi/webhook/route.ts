@@ -116,8 +116,21 @@ async function processEvent(payload: WompiEventPayload): Promise<void> {
       const color = item.color?.trim()
       if (!size || !color) continue
       const qty = item.quantity ?? 1
+
+      // Obtener el garment_type del producto para decrementar la fila correcta
+      let garmentType = ''
+      if (item.product_id) {
+        const { data: prod } = await supabase
+          .from('products')
+          .select('garment_type')
+          .eq('id', item.product_id)
+          .maybeSingle()
+        garmentType = prod?.garment_type ?? ''
+      }
+
       try {
         await supabase.rpc('decrement_global_inventory', {
+          p_garment_type: garmentType,
           p_size: size,
           p_color: color,
           p_qty: qty,
