@@ -107,21 +107,23 @@ async function processEvent(payload: WompiEventPayload): Promise<void> {
     console.error('Error notificando al cliente:', err)
   }
 
-  // Decrementar stock al confirmar pago
+  // Decrementar inventario global al confirmar pago
   if (paymentStatus === 'approved') {
-    const items = (order.items ?? []) as Array<{ product_id?: string; quantity?: number }>
+    type OrderItem = { product_id?: string; quantity?: number; size?: string; color?: string }
+    const items = (order.items ?? []) as OrderItem[]
     for (const item of items) {
-      if (!item.product_id) continue
-      const { data: prod } = await supabase
-        .from('products')
-        .select('stock')
-        .eq('id', item.product_id)
-        .maybeSingle()
-      if (prod != null) {
-        const newStock = Math.max(0, (prod.stock as number) - (item.quantity ?? 1))
-        const patch: Record<string, unknown> = { stock: newStock }
-        if (newStock === 0) patch.out_of_stock = true
-        await supabase.from('products').update(patch).eq('id', item.product_id)
+      const size = item.size?.trim()
+      const color = item.color?.trim()
+      if (!size || !color) continue
+      const qty = item.quantity ?? 1
+      try {
+        await supabase.rpc('decrement_global_inventory', {
+          p_size: size,
+          p_color: color,
+          p_qty: qty,
+        })
+      } catch (err) {
+        console.error('Error decrementando inventario global:', err)
       }
     }
   }
