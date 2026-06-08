@@ -103,8 +103,8 @@ export async function POST(
     : `Número de guía: ${trackingNumber}`
 
   const message = isUpdate
-    ? `${greeting} Actualizamos la guía de tu pedido #${orderShort} 🔄\n\n` +
-      `Cambio de transportadora: ahora va con ${carrierRaw}.\n\n` +
+    ? `${greeting} Actualizamos la guía de envío de tu pedido #${orderShort} 🔄\n\n` +
+      `Va con ${carrierRaw}.\n\n` +
       `${trackingLine}\n\n` +
       `Cualquier duda me cuentas 💛`
     : `${greeting} Tu pedido #${orderShort} ya salió 📦\n\n` +
