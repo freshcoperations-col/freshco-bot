@@ -41,7 +41,7 @@ export async function POST(
     return NextResponse.json({ error: 'short_id requerido' }, { status: 400, headers: cors })
   }
 
-  let body: { tracking_number?: string; shipping_carrier?: string }
+  let body: { tracking_number?: string; shipping_carrier?: string; is_update?: boolean }
   try {
     body = await request.json()
   } catch {
@@ -50,6 +50,7 @@ export async function POST(
 
   const trackingNumber = body.tracking_number?.trim()
   const carrierRaw = body.shipping_carrier?.trim()
+  const isUpdate = Boolean(body.is_update)
   if (!trackingNumber || !carrierRaw) {
     return NextResponse.json(
       { error: 'tracking_number y shipping_carrier son requeridos' },
@@ -101,12 +102,17 @@ export async function POST(
     ? `Sigue tu pedido aquí: ${tracker(trackingNumber)}`
     : `Número de guía: ${trackingNumber}`
 
-  const message =
-    `${greeting} Tu pedido #${orderShort} ya salió 📦\n\n` +
-    `Va con ${carrierRaw} y llega en 2-3 días hábiles.\n\n` +
-    `${trackingLine}\n\n` +
-    `Cuando esté por llegar te aviso por aquí 💛`
+  const message = isUpdate
+    ? `${greeting} Actualizamos la guía de tu pedido #${orderShort} 🔄\n\n` +
+      `Cambio de transportadora: ahora va con ${carrierRaw}.\n\n` +
+      `${trackingLine}\n\n` +
+      `Cualquier duda me cuentas 💛`
+    : `${greeting} Tu pedido #${orderShort} ya salió 📦\n\n` +
+      `Va con ${carrierRaw} y llega en 2-3 días hábiles.\n\n` +
+      `${trackingLine}\n\n` +
+      `Cuando esté por llegar te aviso por aquí 💛`
 
+  let whatsappWarning: string | null = null
   try {
     await sendWhatsAppMessage(order.customer_phone as string, message)
     await supabase.from('messages').insert({
@@ -116,26 +122,29 @@ export async function POST(
       intent: 'consulta_envio',
     })
   } catch (err) {
-    return NextResponse.json(
-      {
-        warning: 'Orden marcada como enviada pero falló la notificación.',
-        error: err instanceof Error ? err.message : String(err),
-      },
-      { status: 207, headers: cors },
-    )
+    const errMsg = err instanceof Error ? err.message : String(err)
+    console.error('WhatsApp ship notification failed:', errMsg)
+    whatsappWarning = errMsg
   }
 
   // Email de envío
-  emailOrderShipped({
-    shortId: orderShort,
-    customerName: order.customer_name as string | null,
-    customerEmail: (order as Record<string, unknown>).customer_email as string | null,
-    total: Number(order.total),
-    items: ((order as Record<string, unknown>).items ?? []) as never,
-    shippingAddress: (order as Record<string, unknown>).shipping_address as string | null,
-    trackingNumber,
-    shippingCarrier: carrierRaw,
-  }).catch((e) => console.error('Email enviado:', e))
+  let emailWarning: string | null = null
+  try {
+    await emailOrderShipped({
+      shortId: orderShort,
+      customerName: order.customer_name as string | null,
+      customerEmail: (order as Record<string, unknown>).customer_email as string | null,
+      total: Number(order.total),
+      items: ((order as Record<string, unknown>).items ?? []) as never,
+      shippingAddress: (order as Record<string, unknown>).shipping_address as string | null,
+      trackingNumber,
+      shippingCarrier: carrierRaw,
+    })
+  } catch (e) {
+    const errMsg = e instanceof Error ? e.message : String(e)
+    console.error('Email ship notification failed:', errMsg)
+    emailWarning = errMsg
+  }
 
   return NextResponse.json(
     {
@@ -144,6 +153,8 @@ export async function POST(
       tracking_number: trackingNumber,
       shipping_carrier: carrierRaw,
       tracking_url: tracker ? tracker(trackingNumber) : null,
+      ...(whatsappWarning && { whatsapp_warning: whatsappWarning }),
+      ...(emailWarning && { email_warning: emailWarning }),
     },
     { headers: cors },
   )
