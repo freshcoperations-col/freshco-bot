@@ -16,11 +16,16 @@ export async function PUT(
 ) {
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
-  if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+  if (!admin.ok || !admin.permissions.products_edit) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
 
   let body: Record<string, unknown>
   try { body = await request.json() } catch {
     return NextResponse.json({ error: 'JSON inválido' }, { status: 400, headers: cors })
+  }
+
+  // Bloquear cambio de precio si no tiene permiso
+  if ((body.price !== undefined || body.sale_price !== undefined) && !admin.permissions.products_pricing) {
+    return NextResponse.json({ error: 'Sin permiso para cambiar precios' }, { status: 403, headers: cors })
   }
 
   const patch: Record<string, unknown> = {}
@@ -115,7 +120,7 @@ export async function DELETE(
 ) {
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
-  if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+  if (!admin.ok || !admin.permissions.products_delete) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
 
   const supabase = createServerClient()
   const { error } = await supabase.from('products').delete().eq('id', params.id)

@@ -1,13 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
+import { ADMIN_PERMISSIONS, type PermissionsMap } from './permissions'
 
-// Verifica que un access_token de Supabase Auth corresponda a un email
-// listado en la env var ADMIN_EMAILS (comma-separated, case-insensitive).
-//
-// Usado por los endpoints internos del admin webapp (NO los endpoints
-// curl-style que siguen usando ADMIN_SECRET con header).
-export async function verifyAdmin(
-  token: string | null,
-): Promise<{ ok: boolean; email?: string; reason?: string }> {
+export type AdminResult =
+  | { ok: false; reason: string }
+  | { ok: true; email: string; role: string; permissions: PermissionsMap; isOwner: boolean }
+
+// Verifica el access_token de Supabase Auth.
+// - Los emails en ADMIN_EMAILS tienen acceso total siempre (backwards compat).
+// - El resto necesita estar en la tabla admin_users con un rol asignado.
+export async function verifyAdmin(token: string | null): Promise<AdminResult> {
   if (!token) return { ok: false, reason: 'no_token' }
 
   const url = process.env.SUPABASE_URL
@@ -15,9 +16,7 @@ export async function verifyAdmin(
   if (!url || !key) return { ok: false, reason: 'misconfigured' }
 
   const supabase = createClient(url, key, {
-    global: {
-      fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }),
-    },
+    global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
   })
 
   const { data, error } = await supabase.auth.getUser(token)
@@ -26,18 +25,32 @@ export async function verifyAdmin(
   const email = data.user.email?.toLowerCase().trim()
   if (!email) return { ok: false, reason: 'no_email' }
 
-  const admins = (process.env.ADMIN_EMAILS ?? '')
+  // Propietarios (ADMIN_EMAILS) → acceso total, siempre
+  const ownerEmails = (process.env.ADMIN_EMAILS ?? '')
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
 
-  if (admins.length === 0) {
-    // Si ADMIN_EMAILS no está configurada, por seguridad no autorizamos a nadie.
-    return { ok: false, reason: 'no_admins_configured' }
+  if (ownerEmails.includes(email)) {
+    return { ok: true, email, role: 'Admin', permissions: ADMIN_PERMISSIONS, isOwner: true }
   }
-  if (!admins.includes(email)) return { ok: false, reason: 'not_admin' }
 
-  return { ok: true, email }
+  // Resto de usuarios → buscar en admin_users + su rol
+  const { data: adminUser } = await supabase
+    .from('admin_users')
+    .select('role_id, admin_roles(name, permissions)')
+    .eq('email', email)
+    .maybeSingle()
+
+  if (!adminUser) return { ok: false, reason: 'not_admin' }
+
+  const raw = adminUser.admin_roles
+  const roleRow = (Array.isArray(raw) ? raw[0] : raw) as { name: string; permissions: Record<string, boolean> } | null
+  if (!roleRow) return { ok: false, reason: 'no_role' }
+
+  const permissions = (roleRow.permissions ?? {}) as PermissionsMap
+
+  return { ok: true, email, role: roleRow.name, permissions, isOwner: false }
 }
 
 export function bearerToken(authHeader: string | null): string | null {
