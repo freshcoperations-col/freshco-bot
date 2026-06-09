@@ -30,11 +30,6 @@ export async function PUT(
   if (body.price !== undefined) patch.price = Number(body.price)
   if (body.sale_price !== undefined) patch.sale_price = body.sale_price != null ? Number(body.sale_price) : null
   if (body.on_sale !== undefined) patch.on_sale = Boolean(body.on_sale)
-  if (body.stock !== undefined) {
-    const newStock = Number(body.stock)
-    patch.stock = newStock
-    patch.out_of_stock = newStock === 0
-  }
   if (Array.isArray(body.sizes)) patch.sizes = body.sizes
   if (Array.isArray(body.colors)) patch.colors = body.colors
   if (Array.isArray(body.collections)) patch.collections = body.collections
@@ -50,8 +45,23 @@ export async function PUT(
       .filter((t) => t.length > 0 && t.length < 40)
       .slice(0, 20)
   }
-  if (Array.isArray(body.out_of_stock_sizes)) patch.out_of_stock_sizes = body.out_of_stock_sizes
-  if (Array.isArray(body.out_of_stock_colors)) patch.out_of_stock_colors = body.out_of_stock_colors
+  if (Array.isArray(body.stock_variants)) {
+    type Variant = { size: string | null; color: string | null; quantity: number }
+    const variants = (body.stock_variants as Variant[]).map((v) => ({
+      size: v.size || null,
+      color: v.color || null,
+      quantity: Math.max(0, Number(v.quantity) || 0),
+    }))
+    patch.stock_variants = variants
+    // Compute total stock as sum of all variants
+    const total = variants.reduce((s, v) => s + v.quantity, 0)
+    patch.stock = total
+    patch.out_of_stock = total === 0
+  } else if (body.stock !== undefined) {
+    const newStock = Number(body.stock)
+    patch.stock = newStock
+    patch.out_of_stock = newStock === 0
+  }
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400, headers: cors })
