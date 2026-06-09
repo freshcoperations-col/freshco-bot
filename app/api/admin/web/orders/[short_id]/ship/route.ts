@@ -71,7 +71,7 @@ export async function POST(
     return NextResponse.json({ error: `Orden #${shortId} no encontrada` }, { status: 404, headers: cors })
   }
 
-  if (order.payment_status !== 'approved') {
+  if (order.payment_status !== 'approved' && order.payment_status !== 'cod') {
     return NextResponse.json(
       { error: `La orden está en estado ${order.payment_status}, no se puede marcar como enviada.` },
       { status: 409, headers: cors },
