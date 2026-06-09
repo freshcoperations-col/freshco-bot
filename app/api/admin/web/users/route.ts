@@ -24,14 +24,32 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: cors })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const users = (data ?? []).map((u: any) => ({
+  const dbUsers = (data ?? []).map((u: any) => ({
     id: u.id as string,
     email: u.email as string,
     role_id: u.role_id as string,
     role_name: (Array.isArray(u.admin_roles) ? u.admin_roles[0]?.name : u.admin_roles?.name) ?? '',
     created_at: u.created_at as string,
+    is_env_owner: false,
   }))
-  return NextResponse.json({ users }, { headers: cors })
+
+  // También incluir propietarios definidos en ADMIN_EMAILS (env var)
+  const ownerEmails = (process.env.ADMIN_EMAILS ?? '')
+    .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean)
+
+  const dbEmailSet = new Set(dbUsers.map((u) => u.email))
+  const envOwners = ownerEmails
+    .filter((email) => !dbEmailSet.has(email))
+    .map((email) => ({
+      id: `env:${email}`,
+      email,
+      role_id: '',
+      role_name: 'Propietario',
+      created_at: new Date(0).toISOString(),
+      is_env_owner: true,
+    }))
+
+  return NextResponse.json({ users: [...envOwners, ...dbUsers] }, { headers: cors })
 }
 
 // POST /api/admin/web/users — agregar usuario al admin
