@@ -128,15 +128,30 @@ async function processEvent(payload: WompiEventPayload): Promise<void> {
         garmentType = prod?.garment_type ?? ''
       }
 
-      try {
-        await supabase.rpc('decrement_global_inventory', {
-          p_garment_type: garmentType,
-          p_size: size,
-          p_color: color,
-          p_qty: qty,
+      const { error: rpcErr } = await supabase.rpc('decrement_global_inventory', {
+        p_garment_type: garmentType,
+        p_size: size,
+        p_color: color,
+        p_qty: qty,
+      })
+      if (rpcErr) {
+        console.error(
+          `[inventory] ERROR al decrementar ${garmentType}/${size}/${color} x${qty} orden=${order.id}:`,
+          rpcErr.message,
+        )
+      } else {
+        // Log del decremento exitoso
+        await supabase.from('inventory_log').insert({
+          garment_type: garmentType,
+          size,
+          color,
+          change_qty: -qty,
+          reason: 'sale',
+          order_id: order.id,
+        }).then(({ error: logErr }) => {
+          if (logErr) console.warn('[inventory_log] no se pudo registrar:', logErr.message)
         })
-      } catch (err) {
-        console.error('Error decrementando inventario global:', err)
+        console.log(`[inventory] decrementado ${garmentType}/${size}/${color} -${qty}`)
       }
     }
   }

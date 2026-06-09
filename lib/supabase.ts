@@ -161,6 +161,21 @@ export async function isAIPaused(
   return true
 }
 
+// Devuelve true si el teléfono mandó más de 5 mensajes en los últimos 30s
+export async function isRateLimited(
+  supabase: SupabaseClient,
+  phone: string,
+): Promise<boolean> {
+  const since = new Date(Date.now() - 30_000).toISOString()
+  const { count } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('customer_phone', phone)
+    .eq('direction', 'inbound')
+    .gte('created_at', since)
+  return (count ?? 0) >= 5
+}
+
 export async function setAIPaused(
   supabase: SupabaseClient,
   phone: string,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
-import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage, isAIPaused, setAIPaused } from '@/lib/supabase'
+import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage, isAIPaused, isRateLimited, setAIPaused } from '@/lib/supabase'
 import {
   sendWhatsAppMessage,
   markAsReadWithTyping,
@@ -119,6 +119,13 @@ async function processWebhook(body: unknown): Promise<void> {
           const isDuplicate = await isDuplicateMessage(supabase, waMessageId)
           if (isDuplicate) {
             console.log(`[wa] duplicado, skip ${waMessageId}`)
+            continue
+          }
+
+          // Rate limit: máx 5 mensajes en 30s por teléfono
+          const rateLimited = await isRateLimited(supabase, phone)
+          if (rateLimited) {
+            console.warn(`[wa] rate limit alcanzado para ${phone}, ignorando mensaje`)
             continue
           }
 

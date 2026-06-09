@@ -61,6 +61,15 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: cors })
 
+  // Log del ajuste manual
+  await supabase.from('inventory_log').insert({
+    garment_type, size, color,
+    change_qty: quantity,
+    reason: 'manual_set',
+  }).then(({ error: logErr }) => {
+    if (logErr) console.warn('[inventory_log] no se pudo registrar ajuste:', logErr.message)
+  })
+
   return NextResponse.json({ ok: true, entry: data }, { headers: cors })
 }
 
