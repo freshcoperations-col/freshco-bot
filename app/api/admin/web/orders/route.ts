@@ -35,7 +35,12 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(limit)
 
-  if (paymentStatus) query = query.eq('payment_status', paymentStatus)
+  if (paymentStatus) {
+    const statuses = paymentStatus.split(',').map((s) => s.trim()).filter(Boolean)
+    query = statuses.length === 1
+      ? query.eq('payment_status', statuses[0])
+      : query.in('payment_status', statuses)
+  }
   if (orderStatus) query = query.eq('status', orderStatus)
 
   const { data, error } = await query
