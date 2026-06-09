@@ -3,6 +3,7 @@ import { emailOrderCreated } from './email'
 import { buildSystemPrompt } from './system-prompt'
 import { SIZE_GUIDE, SHIPPING_INFO, DTF_CARE } from './product-catalog'
 import { PAYMENT_METHODS } from './store-info'
+import { getShippingCost, getShippingZone, SHIPPING_COSTS, SHIPPING_TIMES } from './shipping'
 import {
   createServerClient,
   saveOrder,
@@ -335,7 +336,12 @@ async function executeTool(
       return JSON.stringify({ ...SIZE_GUIDE, cuidados_dtf: DTF_CARE })
 
     case 'get_shipping_info':
-      return JSON.stringify(SHIPPING_INFO)
+      return JSON.stringify({
+        ...SHIPPING_INFO,
+        costos_exactos: SHIPPING_COSTS,
+        tiempos: SHIPPING_TIMES,
+        instruccion: 'Para calcular el envío: identifica la ciudad del cliente y usa getShippingZone. bogota=$10.000, regional=$12.000, nacional=$15.000. Si algún producto tiene free_shipping=true, el envío es $0.',
+      })
 
     case 'get_payment_methods':
       return JSON.stringify(PAYMENT_METHODS)
@@ -634,17 +640,25 @@ async function executeTool(
       const customerEmail = input.customer_email ? String(input.customer_email) : undefined
       const couponCode = input.coupon_code ? String(input.coupon_code).toUpperCase() : undefined
       const discountAmount = input.discount_amount ? Number(input.discount_amount) : 0
+      const paymentMethod = input.payment_method as string
+      const isCod = paymentMethod.toLowerCase().includes('contraentrega')
+      const shippingAddress = input.shipping_address as string
+      // Extraer ciudad de la dirección para calcular envío
+      const cityMatch = shippingAddress.split(',')[0]?.trim() ?? shippingAddress
+      const shippingCostValue = getShippingCost(cityMatch, false)
       const order = await saveOrder(supabase, {
         customer_phone: customerPhone,
         items: input.items as OrderItem[],
         total: input.total as number,
-        shipping_address: input.shipping_address as string,
-        payment_method: input.payment_method as string,
+        shipping_address: shippingAddress,
+        payment_method: paymentMethod,
         customer_name: customerName,
         customer_email: customerEmail,
         source: 'whatsapp_bot',
         coupon_code: couponCode,
         discount_amount: discountAmount,
+        payment_status: isCod ? 'cod' : 'pending',
+        shipping_cost: shippingCostValue,
       })
 
       // Incrementar used_count si se usó cupón

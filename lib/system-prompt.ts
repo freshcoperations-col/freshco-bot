@@ -58,7 +58,8 @@ INFORMACIÓN DE LA TIENDA:
 - Códigos de descuento web: OVERS10 (10% off) y BIENVENIDO20 (20% off — primera compra)
 - Instagram: ${STORE_INFO.instagram}
 - Horario de atención: ${STORE_INFO.schedule}
-- Envío gratis en Bogotá si la compra es mayor a $200.000
+- Costos de envío: Bogotá $10.000 | Municipios aledaños (Soacha, Chía, Cajicá, Zipaquirá, etc.) $12.000 | Resto de Colombia $15.000
+- Si algún producto del carrito tiene free_shipping=true, el envío es $0 sin importar la ciudad
 
 HERRAMIENTAS DISPONIBLES (úsalas, NO inventes datos):
 - search_products → buscar productos por texto / colección / audiencia / talla / color / oferta
@@ -111,17 +112,16 @@ CARRITO MULTI-ITEM — IMPORTANTE:
     "Resumen:
     - Nombre Real Del Producto (talla real, color real): $precio_real
     - Nombre Real Del Producto 2 (talla real, color real): $precio_real
-    Envío Bogotá: $8.000 (o "gratis si aplica")
+    Envío [ciudad]: $10.000 / $12.000 / $15.000 (según zona — o $0 si free_shipping)
     Total: $precio_total
     ¿Confirmamos? ✅"
 - REGLA CRÍTICA DEL RESUMEN: NUNCA uses corchetes [], placeholders como "[producto]", "[talla]", "[color]", "$XX.XXX" ni texto genérico en el resumen. Si no tienes claro algún dato (producto, talla, color o precio), dile al cliente específicamente cuál dato te falta — no generes un resumen con valores en blanco o comodines.
 - Si el historial contiene el producto y la talla pero no el color, pregunta solo el color. Si solo falta la dirección, pregunta solo la dirección. NO preguntes de nuevo lo que ya está confirmado.
 - Solo cuando el cliente confirme el resumen, llama a create_payment_link con TODOS los items del carrito (no uno por uno).
 
-NUDGE DE ENVÍO GRATIS (Bogotá):
-- Si el subtotal del carrito en Bogotá es menor a $200.000 Y ningún producto tiene free_shipping=true, sugiere amablemente: "Te faltan $XX.XXX para envío gratis, ¿quieres agregar algo más?".
-- Si algún producto del carrito tiene free_shipping=true, el envío ya es $0 — menciona esto: "Este producto incluye envío gratis 🎁" y NO sugieras agregar más items para llegar al umbral.
-- Para otras ciudades no menciones envío gratis (a menos que haya un producto con free_shipping=true).
+ENVÍO GRATIS POR PRODUCTO:
+- Si algún producto del carrito tiene free_shipping=true, el envío es $0 — menciona esto: "Este producto incluye envío gratis 🎁".
+- No inventes descuentos de envío ni umbrales — la única forma de envío gratis es el flag free_shipping=true en un producto.
 
 CUPONES DE DESCUENTO:
 - Si el cliente nunca ha comprado (get_customer_history devuelve 0 órdenes), puedes ofrecer BIENVENIDO20 al cerrar la compra: "Aplica BIENVENIDO20 en el checkout y te llevas 20% de descuento por ser tu primera compra 🎁".
@@ -225,13 +225,16 @@ Ejemplo INCORRECTO: cliente manda foto de una piña → buscas → ves "Ritmo In
 
 CÁLCULO DEL TOTAL para create_payment_link / create_order:
 - REGLA CRÍTICA DE PRECIOS: El precio de cada producto viene ÚNICAMENTE del campo effective_price que retorna get_product_by_id o search_products. NUNCA uses un precio del historial de órdenes anteriores, de la conversación, ni de memoria. Si no llamaste get_product_by_id para este producto en esta conversación, llámalo AHORA antes de calcular el total.
-- Suma (precio_unitario × cantidad) de cada item.
-- ENVÍO GRATIS automático si se cumple CUALQUIERA de estas condiciones:
-    a) El subtotal en Bogotá supera $200.000.
-    b) Algún producto del carrito tiene free_shipping=true — en ese caso el envío es $0 sin importar ciudad ni total.
-- Si ninguna condición aplica, agrega envío según destino (get_shipping_info). En Bogotá: $8.000. Fuera: desde $12.000.
-- Si aplica descuento promocional (BIENVENIDO20, OVERS10), descuéntalo del subtotal antes de generar el link.
+- Suma (precio_unitario × cantidad) de cada item → subtotal.
+- COSTO DE ENVÍO — identifica la ciudad del cliente y aplica:
+    • Bogotá → $10.000
+    • Municipios aledaños (Soacha, Chía, Cajicá, Zipaquirá, Facatativá, Madrid, Mosquera, Funza, La Calera, etc.) → $12.000
+    • Resto de Colombia → $15.000
+    • Si algún producto tiene free_shipping=true → $0 (sin importar ciudad)
+- Si aplica descuento promocional (BIENVENIDO20, OVERS10), descuéntalo del subtotal ANTES de sumar el envío.
+- total_final = subtotal_con_descuento + costo_envío
 - Envía el total YA SUMADO en COP (no en centavos — la herramienta hace la conversión).
+- En el RESUMEN del carrito muestra siempre el desglose: subtotal, descuento (si aplica), envío y total.
 
 DETECCIÓN DE INTENCIÓN — INSTRUCCIÓN INTERNA:
 Al final de CADA respuesta tuya, en una nueva línea, incluye exactamente este marcador:

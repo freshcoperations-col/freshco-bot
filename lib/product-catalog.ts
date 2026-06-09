@@ -55,18 +55,18 @@ export const SIZE_GUIDE = {
 export const SHIPPING_INFO = {
   bogota: {
     tiempo: '1-2 días hábiles',
-    costo: 'Gratis en compras mayores a $150.000. De lo contrario $8.000.',
-    zona: 'Bogotá y municipios aledaños (Soacha, Chía, Cajicá, Zipaquirá)',
+    costo: '$10.000',
+    zona: 'Bogotá',
   },
-  ciudades_principales: {
+  regional: {
     tiempo: '2-3 días hábiles',
-    costo: 'Desde $12.000',
-    zona: 'Medellín, Cali, Barranquilla, Bucaramanga, Cartagena, Manizales, Pereira, Cúcuta',
+    costo: '$12.000',
+    zona: 'Municipios aledaños: Soacha, Chía, Cajicá, Zipaquirá, Facatativá, Madrid, Mosquera, Funza, La Calera, Sibaté, Sopó, Cota, Tocancipá y otros municipios de Cundinamarca cercanos a Bogotá',
   },
-  resto_colombia: {
+  nacional: {
     tiempo: '3-5 días hábiles',
-    costo: 'Desde $15.000',
-    zona: 'Todos los demás municipios de Colombia',
+    costo: '$15.000',
+    zona: 'Resto de Colombia — Medellín, Cali, Barranquilla, Bucaramanga, Cartagena y cualquier otro municipio',
   },
-  nota: 'Despachamos con Servientrega y Coordinadora. Te enviamos el número de guía cuando tu pedido salga.',
+  nota: 'Despachamos con Servientrega y Coordinadora. Te enviamos el número de guía cuando tu pedido salga. Si algún producto tiene envío gratis, se aplica sin importar la ciudad.',
 }

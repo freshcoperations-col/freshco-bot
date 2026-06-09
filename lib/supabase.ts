@@ -22,7 +22,7 @@ export interface Order {
   // Wompi payment fields (added in migration-2026-05-29-orders-payments.sql)
   wompi_reference: string | null
   wompi_transaction_id: string | null
-  payment_status: 'pending' | 'approved' | 'declined' | 'voided' | 'error'
+  payment_status: 'pending' | 'approved' | 'declined' | 'voided' | 'error' | 'cod'
   payment_link_url: string | null
   amount_in_cents: number | null
   currency: string | null
@@ -208,6 +208,8 @@ export async function saveOrder(
     source?: 'whatsapp_bot' | 'webpage'
     coupon_code?: string
     discount_amount?: number
+    payment_status?: 'pending' | 'cod'
+    shipping_cost?: number
   },
 ): Promise<Order | null> {
   const { data: order, error } = await supabase

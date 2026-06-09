@@ -5,7 +5,6 @@ export const STORE_INFO = {
   country: 'Colombia',
   instagram: '@freshco.col',
   schedule: 'Lunes a sábado 9am–8pm, domingos 10am–6pm',
-  minOrderFreeShipping: 150000, // COP
 }
 
 export const PAYMENT_METHODS = [
@@ -20,7 +19,8 @@ export const PAYMENT_METHODS = [
   },
   {
     method: 'Contraentrega',
-    details: 'Disponible en Bogotá y ciudades principales.',
-    instructions: 'Pagas directamente al recibir tu pedido. Sin costo adicional.',
+    details: 'Disponible a todo el país. Pagas en efectivo al recibir tu pedido.',
+    instructions:
+      'Confirmas el pedido y lo despachamos. El pago lo haces directamente al mensajero o transportadora al momento de la entrega.',
   },
 ]
