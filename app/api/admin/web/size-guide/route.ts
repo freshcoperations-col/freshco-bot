@@ -40,3 +40,38 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ guides: result }, { headers: cors })
 }
+
+// POST /api/admin/web/size-guide
+// Body: { label: string } — crea un nuevo tipo de prenda en garment_types
+export async function POST(request: NextRequest) {
+  const cors = adminCors(request.headers.get('origin'))
+  const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
+  if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+
+  let body: { label?: string }
+  try { body = await request.json() } catch {
+    return NextResponse.json({ error: 'JSON inválido' }, { status: 400, headers: cors })
+  }
+
+  const label = (body.label ?? '').trim()
+  if (!label) return NextResponse.json({ error: 'label requerido' }, { status: 400, headers: cors })
+
+  // Generar id a partir del label
+  const id = label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '')
+
+  const supabase = createServerClient()
+
+  // sort_order = max actual + 1
+  const { data: existing } = await supabase.from('garment_types').select('sort_order').order('sort_order', { ascending: false }).limit(1)
+  const nextOrder = ((existing?.[0]?.sort_order ?? -1) as number) + 1
+
+  const { data, error } = await supabase
+    .from('garment_types')
+    .insert({ id, label, sort_order: nextOrder, active: true })
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: cors })
+
+  return NextResponse.json({ garment_type: data }, { status: 201, headers: cors })
+}

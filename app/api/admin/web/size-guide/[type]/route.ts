@@ -59,3 +59,23 @@ export async function PUT(
 
   return NextResponse.json(data, { headers: cors })
 }
+
+// DELETE /api/admin/web/size-guide/[type]
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { type: string } },
+) {
+  const cors = adminCors(request.headers.get('origin'))
+  const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
+  if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+
+  const supabase = createServerClient()
+
+  // Eliminar guía de tallas y marcar garment_type como inactivo
+  await supabase.from('size_guide').delete().eq('garment_type', params.type)
+  const { error } = await supabase.from('garment_types').delete().eq('id', params.type)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: cors })
+
+  return NextResponse.json({ ok: true }, { headers: cors })
+}
