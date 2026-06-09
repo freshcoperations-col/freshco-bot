@@ -98,18 +98,18 @@ export async function POST(
   const greeting = firstName ? `¡${firstName}!` : '¡Hey!'
   const orderShort = (order.id as string).slice(0, 8).toUpperCase()
   const tracker = CARRIER_TRACKING_URLS[carrierSlug(carrierRaw)]
-  const trackingLine = tracker
-    ? `Sigue tu pedido aquí: ${tracker(trackingNumber)}`
-    : `Número de guía: ${trackingNumber}`
+  const trackingUrl = tracker ? `Sigue tu pedido aquí: ${tracker(trackingNumber)}` : null
+
+  const carrierLine = trackingUrl
+    ? `Va con ${carrierRaw}, guía: ${trackingNumber}\n\n${trackingUrl}`
+    : `Va con ${carrierRaw}, guía: ${trackingNumber}`
 
   const message = isUpdate
     ? `${greeting} Actualizamos la guía de envío de tu pedido #${orderShort} 🔄\n\n` +
-      `Va con ${carrierRaw}.\n\n` +
-      `${trackingLine}\n\n` +
+      `${carrierLine}\n\n` +
       `Cualquier duda me cuentas 💛`
     : `${greeting} Tu pedido #${orderShort} ya salió 📦\n\n` +
-      `Va con ${carrierRaw} y llega en 2-3 días hábiles.\n\n` +
-      `${trackingLine}\n\n` +
+      `${carrierLine}\n\n` +
       `Cuando esté por llegar te aviso por aquí 💛`
 
   let whatsappWarning: string | null = null
