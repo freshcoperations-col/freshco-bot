@@ -10,14 +10,20 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@gltf-transform/core": "^4.4.0",
+    "@gltf-transform/extensions": "^4.4.0",
+    "@gltf-transform/functions": "^4.4.0",
     "@supabase/supabase-js": "^2.39.0",
     "@types/nodemailer": "^8.0.0",
     "@vercel/functions": "^3.6.1",
     "date-fns": "^3.3.1",
+    "draco3dgltf": "^1.5.7",
+    "meshoptimizer": "^1.1.1",
     "next": "14.2.35",
     "nodemailer": "^8.0.10",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@types/node": "^20",
