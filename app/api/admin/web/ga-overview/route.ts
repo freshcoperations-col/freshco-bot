@@ -71,7 +71,8 @@ export async function GET(request: NextRequest) {
   ]
 
   try {
-    const [[batch], realtime] = await Promise.all([
+    const [[batch1], [batch2], realtime] = await Promise.all([
+      // batchRunReports admite un máximo de 5 solicitudes por llamada.
       client.batchRunReports({
         property,
         requests: [
@@ -95,6 +96,11 @@ export async function GET(request: NextRequest) {
             metrics: [{ name: 'sessions' }, { name: 'activeUsers' }],
             orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
           },
+        ],
+      }),
+      client.batchRunReports({
+        property,
+        requests: [
           {
             dateRanges: [{ startDate, endDate }],
             dimensions: [{ name: 'deviceCategory' }],
@@ -112,7 +118,7 @@ export async function GET(request: NextRequest) {
       client.runRealtimeReport({ property, metrics: [{ name: 'activeUsers' }] }).catch(() => null),
     ])
 
-    const reports = batch.reports ?? []
+    const reports = [...(batch1.reports ?? []), ...(batch2.reports ?? [])]
 
     const overviewFrom = (report: (typeof reports)[number] | undefined) => {
       const vals = report?.rows?.[0]?.metricValues ?? []
