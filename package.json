@@ -13,6 +13,7 @@
     "@gltf-transform/core": "^4.4.0",
     "@gltf-transform/extensions": "^4.4.0",
     "@gltf-transform/functions": "^4.4.0",
+    "@google-analytics/data": "^6.1.0",
     "@supabase/supabase-js": "^2.39.0",
     "@types/nodemailer": "^8.0.0",
     "@vercel/functions": "^3.6.1",
