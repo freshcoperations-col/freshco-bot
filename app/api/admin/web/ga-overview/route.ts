@@ -88,7 +88,6 @@ export async function GET(request: NextRequest) {
             dimensions: [{ name: 'pagePathPlusQueryString' }],
             metrics: [{ name: 'screenPageViews' }, { name: 'activeUsers' }],
             orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
-            limit: '10',
           },
           {
             dateRanges: [{ startDate, endDate }],
@@ -107,7 +106,6 @@ export async function GET(request: NextRequest) {
             dimensions: [{ name: 'country' }],
             metrics: [{ name: 'activeUsers' }],
             orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }],
-            limit: '8',
           },
         ],
       }),
@@ -141,7 +139,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    const top_pages = (reports[3]?.rows ?? []).map((r) => ({
+    const top_pages = (reports[3]?.rows ?? []).slice(0, 10).map((r) => ({
       path: r.dimensionValues?.[0]?.value || '/',
       page_views: num(r.metricValues?.[0]?.value),
       active_users: num(r.metricValues?.[1]?.value),
@@ -161,7 +159,7 @@ export async function GET(request: NextRequest) {
       sessions: num(r.metricValues?.[0]?.value),
     }))
 
-    const countries = (reports[6]?.rows ?? []).map((r) => ({
+    const countries = (reports[6]?.rows ?? []).slice(0, 8).map((r) => ({
       country: r.dimensionValues?.[0]?.value ?? '',
       active_users: num(r.metricValues?.[0]?.value),
     }))
