@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
             dimensions: [{ name: 'pagePathPlusQueryString' }],
             metrics: [{ name: 'screenPageViews' }, { name: 'activeUsers' }],
             orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
-            limit: 10,
+            limit: '10',
           },
           {
             dateRanges: [{ startDate, endDate }],
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
             dimensions: [{ name: 'country' }],
             metrics: [{ name: 'activeUsers' }],
             orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }],
-            limit: 8,
+            limit: '8',
           },
         ],
       }),
