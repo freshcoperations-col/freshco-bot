@@ -77,10 +77,21 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createServerClient()
-  const { data, error } = await supabase
+  const url = new URL(request.url)
+  const search = url.searchParams.get('search')?.trim()
+  const limit = Math.min(Number(url.searchParams.get('limit') ?? 200), 200)
+
+  let q = supabase
     .from('products_full')
     .select('id, name, description, price, sale_price, on_sale, stock, available, out_of_stock, featured, free_shipping, colors, sizes, collections, collection_labels, garment_type, garment_type_label, material, printing_method, visual_tags, audience, images, created_at')
     .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (search) {
+    q = q.ilike('name', `%${search}%`)
+  }
+
+  const { data, error } = await q
 
   if (error) {
     return NextResponse.json({ error: 'query_failed', details: error.message }, { status: 500, headers: cors })
