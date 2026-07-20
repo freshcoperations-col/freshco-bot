@@ -24,8 +24,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Firma inválida' }, { status: 401 })
   }
 
-  // Procesar de forma asíncrona; siempre respondemos 200 a Wompi.
-  void processEvent(payload).catch((err) => {
+  // Awaitar el proceso antes de responder: en Vercel serverless el proceso
+  // muere al retornar la respuesta, así que no se puede usar fire-and-forget.
+  await processEvent(payload).catch((err) => {
     console.error('Error procesando evento Wompi:', err)
   })
 
