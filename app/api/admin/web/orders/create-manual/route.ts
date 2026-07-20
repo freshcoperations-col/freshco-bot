@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
       unit_price: number
     }>
     notes?: string
+    generate_link?: boolean
   }
 
   try {
@@ -86,19 +87,22 @@ export async function POST(request: NextRequest) {
     .update({ wompi_reference: reference })
     .eq('id', order.id)
 
-  // Generar link de pago Wompi con precio fijo
+  // Generar link de pago Wompi solo si se solicitó
   let paymentLink: string | null = null
-  try {
-    paymentLink = buildPaymentLink({
-      reference,
-      amountInCents,
-      customerEmail: body.customer_email,
-      customerName: customer_name,
-      customerPhone: customer_phone.replace(/^\+/, ''),
-      redirectUrl: `${process.env.WOMPI_REDIRECT_URL ?? 'https://freshco-design.com'}?order_paid=1`,
-    })
-  } catch (e) {
-    console.error('[create-manual] Error generando link Wompi:', e)
+  const shouldGenerateLink = body.generate_link !== false
+  if (shouldGenerateLink) {
+    try {
+      paymentLink = buildPaymentLink({
+        reference,
+        amountInCents,
+        customerEmail: body.customer_email,
+        customerName: customer_name,
+        customerPhone: customer_phone.replace(/^\+/, ''),
+        redirectUrl: `${process.env.WOMPI_REDIRECT_URL ?? 'https://freshco-design.com'}?order_paid=1`,
+      })
+    } catch (e) {
+      console.error('[create-manual] Error generando link Wompi:', e)
+    }
   }
 
   return NextResponse.json(
