@@ -57,6 +57,8 @@ export function ChatView({ phone, messages, firstContactAt, aiPaused, customerNa
     ? `¡Hola ${firstName}! 👋 Soy tu asesor de Freshco. Estoy aquí para atenderte personalmente. ¿En qué te puedo ayudar? 💛`
     : `¡Hola! 👋 Soy tu asesor de Freshco. Estoy aquí para atenderte personalmente. ¿En qué te puedo ayudar? 💛`
 
+  const infoRequestTemplate = `Hola 👋 Para procesar tu pedido necesitamos los siguientes datos:\n\n📝 *Nombre completo*\n📍 *Dirección de envío* (calle, número, barrio, ciudad)\n📧 *Correo electrónico*\n\n¡Muchas gracias! 🙏`
+
   async function handleSend() {
     if (!text.trim() || !phone || sending) return
     setSending(true)
@@ -76,7 +78,7 @@ export function ChatView({ phone, messages, firstContactAt, aiPaused, customerNa
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-200 bg-white flex-shrink-0">
-        <div className="text-base font-mono font-semibold text-gray-900">+{phone}</div>
+        <div className="text-base font-mono font-semibold text-gray-900">{phone.startsWith('+') ? phone : `+${phone}`}</div>
         <div className="text-xs text-gray-400 mt-0.5">
           Primer contacto: {firstContact}
         </div>
@@ -107,12 +109,20 @@ export function ChatView({ phone, messages, firstContactAt, aiPaused, customerNa
             <span className="text-xs text-orange-600 font-medium">
               Al pausado — tu mensaje llegará al cliente.
             </span>
-            <button
-              onClick={() => setText(greetingTemplate)}
-              className="text-xs px-2.5 py-1 bg-white border border-orange-300 text-orange-700 rounded hover:bg-orange-100 whitespace-nowrap font-medium"
-            >
-              👋 Usar saludo
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setText(infoRequestTemplate)}
+                className="text-xs px-2.5 py-1 bg-white border border-amber-300 text-amber-700 rounded hover:bg-amber-100 whitespace-nowrap font-medium"
+              >
+                📋 Pedir datos
+              </button>
+              <button
+                onClick={() => setText(greetingTemplate)}
+                className="text-xs px-2.5 py-1 bg-white border border-orange-300 text-orange-700 rounded hover:bg-orange-100 whitespace-nowrap font-medium"
+              >
+                👋 Usar saludo
+              </button>
+            </div>
           </div>
           <div className="flex gap-2">
             <input

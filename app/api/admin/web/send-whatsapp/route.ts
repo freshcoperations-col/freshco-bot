@@ -27,23 +27,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'JSON inválido' }, { status: 400, headers: cors })
   }
 
-  const phone = body.phone?.trim().replace(/\s/g, '').replace(/^\+{2,}/, '+') ?? ''
+  // Normalizar: quitar espacios y ++ accidentales
+  const phoneNorm = body.phone?.trim().replace(/\s/g, '').replace(/^\+{2,}/, '+') ?? ''
   const { message } = body
-  if (!phone || !message?.trim()) {
+  if (!phoneNorm || !message?.trim()) {
     return NextResponse.json({ error: 'phone y message son requeridos' }, { status: 400, headers: cors })
   }
 
   try {
-    await sendWhatsAppMessage(phone, message)
+    await sendWhatsAppMessage(phoneNorm, message)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({ error: 'No se pudo enviar el mensaje por WhatsApp', detail: msg }, { status: 502, headers: cors })
   }
 
-  // Registrar en Supabase para que aparezca en Conversaciones
+  // Guardar sin el + inicial para coincidir con el formato que usa el bot
+  // (los mensajes del webhook de WhatsApp llegan como "573..." sin +)
+  const phoneForDB = phoneNorm.replace(/^\+/, '')
+
   const supabase = createServerClient()
   await logMessage(supabase, {
-    customer_phone: phone,
+    customer_phone: phoneForDB,
     direction: 'outbound',
     content: message,
     intent: 'link_pago',
