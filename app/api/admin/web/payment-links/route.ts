@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase'
 import { verifyAdmin, bearerToken } from '@/lib/admin-auth'
 import { adminCors } from '@/lib/admin-cors'
 import { buildPaymentLink } from '@/lib/wompi'
+import { randomUUID } from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,8 +11,14 @@ export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, { status: 204, headers: adminCors(request.headers.get('origin')) })
 }
 
+// Quita espacios y normaliza el prefijo + (evita ++57...)
+function normalizePhone(p: string): string {
+  return p.trim().replace(/\s/g, '').replace(/^\+{2,}/, '+')
+}
+
 // POST /api/admin/web/payment-links
-// Genera un link de pago Wompi con monto fijo, opcionalmente relacionado a un pedido existente.
+// Genera SOLO un link de Wompi con monto fijo. No crea pedidos.
+// Si se pasa related_order_id, registra el link en la nota de ese pedido.
 export async function POST(request: NextRequest) {
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
@@ -34,7 +41,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'JSON inválido' }, { status: 400, headers: cors })
   }
 
-  const { amount, customer_name, customer_phone } = body
+  const { amount, customer_name } = body
+  const customer_phone = normalizePhone(body.customer_phone ?? '')
+
   if (!amount || amount <= 0 || !customer_name || !customer_phone) {
     return NextResponse.json(
       { error: 'amount, customer_name y customer_phone son requeridos' },
@@ -43,38 +52,25 @@ export async function POST(request: NextRequest) {
   }
 
   const amountInCents = Math.round(amount) * 100
-  const supabase = createServerClient()
+  const reference = `LINK-${randomUUID().slice(0, 8).toUpperCase()}-${Date.now()}`
 
-  // Construir el campo notes con referencia al pedido relacionado si aplica
-  const noteParts: string[] = []
-  if (body.description) noteParts.push(body.description)
-  if (body.related_order_id) noteParts.push(`Pedido relacionado: ${body.related_order_id}`)
-  const notes = noteParts.length > 0 ? noteParts.join(' — ') : null
+  // Si hay pedido relacionado, guardamos el link en su campo notes (no crea pedido nuevo)
+  if (body.related_order_id) {
+    try {
+      const supabase = createServerClient()
+      const { data: existing } = await supabase
+        .from('orders')
+        .select('notes')
+        .eq('id', body.related_order_id)
+        .single()
 
-  const { data: order, error } = await supabase
-    .from('orders')
-    .insert({
-      customer_name,
-      customer_phone,
-      customer_email: body.customer_email ?? null,
-      items: [{ product_name: body.description ?? 'Pago adicional', quantity: 1, unit_price: amount }],
-      total: amount,
-      payment_status: 'pending',
-      status: 'pendiente',
-      source: 'payment_link',
-      notes,
-    })
-    .select('id')
-    .single()
-
-  if (error || !order) {
-    return NextResponse.json({ error: 'No se pudo crear el registro', detail: error?.message }, { status: 500, headers: cors })
+      const extraNote = `Link adicional ${body.description ? `(${body.description}) ` : ''}ref:${reference}`
+      const updatedNotes = existing?.notes ? `${existing.notes}\n${extraNote}` : extraNote
+      await supabase.from('orders').update({ notes: updatedNotes }).eq('id', body.related_order_id)
+    } catch {
+      // No crítico — el link se genera igual
+    }
   }
-
-  const shortId = order.id.slice(0, 8).toUpperCase()
-  const reference = `LINK-${shortId}-${Date.now()}`
-
-  await supabase.from('orders').update({ wompi_reference: reference }).eq('id', order.id)
 
   let paymentLink: string | null = null
   try {
@@ -88,10 +84,11 @@ export async function POST(request: NextRequest) {
     })
   } catch (e) {
     console.error('[payment-links] Error generando link Wompi:', e)
+    return NextResponse.json({ error: 'No se pudo generar el link de Wompi' }, { status: 500, headers: cors })
   }
 
   return NextResponse.json(
-    { order_id: order.id, short_id: shortId, reference, amount, payment_link: paymentLink },
-    { status: 201, headers: cors },
+    { reference, amount, payment_link: paymentLink },
+    { status: 200, headers: cors },
   )
 }

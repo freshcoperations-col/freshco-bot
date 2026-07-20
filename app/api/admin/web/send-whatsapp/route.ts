@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'JSON inválido' }, { status: 400, headers: cors })
   }
 
-  const { phone, message } = body
+  const phone = body.phone?.trim().replace(/\s/g, '').replace(/^\+{2,}/, '+') ?? ''
+  const { message } = body
   if (!phone || !message?.trim()) {
     return NextResponse.json({ error: 'phone y message son requeridos' }, { status: 400, headers: cors })
   }

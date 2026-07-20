@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'JSON inválido' }, { status: 400, headers: cors })
   }
 
-  const { customer_name, customer_phone, items } = body
+  const { customer_name, items } = body
+  const customer_phone = body.customer_phone?.trim().replace(/\s/g, '').replace(/^\+{2,}/, '+') ?? ''
   if (!customer_name || !customer_phone || !items?.length) {
     return NextResponse.json(
       { error: 'customer_name, customer_phone e items son requeridos' },
