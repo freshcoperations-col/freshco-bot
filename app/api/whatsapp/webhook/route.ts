@@ -73,6 +73,22 @@ async function processWebhook(body: unknown): Promise<void> {
 
     for (const entry of data.entry ?? []) {
       for (const change of entry.changes ?? []) {
+        // Loggear statuses de entrega para detectar mensajes fallidos
+        if (change.field === 'messages') {
+          const statuses = (change.value as Record<string, unknown>)?.statuses as Array<Record<string, unknown>> | undefined
+          if (statuses?.length) {
+            for (const s of statuses) {
+              const status = s.status
+              const errors = s.errors
+              if (status === 'failed' || errors) {
+                console.error('[whatsapp] mensaje fallido:', JSON.stringify({ status, errors, recipient: s.recipient_id }))
+              } else {
+                console.log('[whatsapp] status entrega:', status, 'para:', s.recipient_id)
+              }
+            }
+          }
+        }
+
         if (change.field !== 'messages') continue
 
         const messages = change.value?.messages ?? []
