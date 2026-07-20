@@ -97,7 +97,7 @@ async function processEvent(payload: WompiEventPayload): Promise<void> {
   if (!message) return
 
   try {
-    await sendWhatsAppMessage(phone, message)
+    await sendWhatsAppMessage(phone, message, orderShort)
     await logMessage(supabase, {
       customer_phone: phone,
       direction: 'outbound',

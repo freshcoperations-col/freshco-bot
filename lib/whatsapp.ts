@@ -1,6 +1,6 @@
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0'
 
-export async function sendWhatsAppMessage(to: string, message: string): Promise<void> {
+export async function sendWhatsAppMessage(to: string, message: string, orderShortId?: string): Promise<void> {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
 
@@ -28,9 +28,9 @@ export async function sendWhatsAppMessage(to: string, message: string): Promise<
     const body = await response.json().catch(() => ({})) as { error?: { code?: number } }
     const code = body?.error?.code
 
-    // Error 131047: ventana de 24h cerrada — intentar con template de orden
+    // Error 131047: ventana de 24h cerrada — intentar con template de confirmación
     if (code === 131047) {
-      await sendOrderTemplate(toClean, phoneNumberId, accessToken)
+      await sendOrderTemplate(toClean, phoneNumberId, accessToken, orderShortId)
       return
     }
 
@@ -40,23 +40,36 @@ export async function sendWhatsAppMessage(to: string, message: string): Promise<
 
 // Envía la plantilla "confirmacion_pedido" (debe estar aprobada en Meta).
 // Se usa cuando el cliente no ha escrito en las últimas 24h (error 131047).
-async function sendOrderTemplate(to: string, phoneNumberId: string, accessToken: string): Promise<void> {
+async function sendOrderTemplate(
+  to: string,
+  phoneNumberId: string,
+  accessToken: string,
+  orderShortId?: string,
+): Promise<void> {
   const templateName = process.env.WHATSAPP_ORDER_TEMPLATE ?? 'confirmacion_pedido'
+  const body: Record<string, unknown> = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { code: 'es' },
+      ...(orderShortId && {
+        components: [{
+          type: 'body',
+          parameters: [{ type: 'text', text: orderShortId }],
+        }],
+      }),
+    },
+  }
+
   const response = await fetch(`${WHATSAPP_API_URL}/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to,
-      type: 'template',
-      template: {
-        name: templateName,
-        language: { code: 'es' },
-      },
-    }),
+    body: JSON.stringify(body),
   })
 
   if (!response.ok) {
