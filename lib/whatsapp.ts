@@ -8,7 +8,6 @@ export async function sendWhatsAppMessage(to: string, message: string): Promise<
     throw new Error('Variables WHATSAPP_PHONE_NUMBER_ID y WHATSAPP_ACCESS_TOKEN requeridas')
   }
 
-  // WhatsApp espera el número sin el signo +
   const toClean = to.replace(/^\+/, '')
 
   const response = await fetch(`${WHATSAPP_API_URL}/${phoneNumberId}/messages`, {
@@ -26,8 +25,43 @@ export async function sendWhatsAppMessage(to: string, message: string): Promise<
   })
 
   if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: { code?: number } }
+    const code = body?.error?.code
+
+    // Error 131047: ventana de 24h cerrada — intentar con template de orden
+    if (code === 131047) {
+      await sendOrderTemplate(toClean, phoneNumberId, accessToken)
+      return
+    }
+
+    throw new Error(`WhatsApp API error ${response.status}: ${JSON.stringify(body)}`)
+  }
+}
+
+// Envía la plantilla "confirmacion_pedido" (debe estar aprobada en Meta).
+// Se usa cuando el cliente no ha escrito en las últimas 24h (error 131047).
+async function sendOrderTemplate(to: string, phoneNumberId: string, accessToken: string): Promise<void> {
+  const templateName = process.env.WHATSAPP_ORDER_TEMPLATE ?? 'confirmacion_pedido'
+  const response = await fetch(`${WHATSAPP_API_URL}/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: 'es' },
+      },
+    }),
+  })
+
+  if (!response.ok) {
     const errorText = await response.text()
-    throw new Error(`WhatsApp API error ${response.status}: ${errorText}`)
+    throw new Error(`WhatsApp template error ${response.status}: ${errorText}`)
   }
 }
 
