@@ -60,6 +60,15 @@ export async function POST(request: NextRequest) {
     featured: Boolean(body.featured),
     free_shipping: Boolean(body.free_shipping),
     audience: body.audience ? String(body.audience) : 'unisex',
+    // Se pasan al duplicar un producto: el arte es el mismo, así que las
+    // etiquetas visuales siguen siendo válidas y el bot puede encontrarlo
+    // por foto sin volver a correr el etiquetado con IA.
+    visual_tags: Array.isArray(body.visual_tags)
+      ? (body.visual_tags as unknown[])
+          .map((t) => String(t).trim().toLowerCase())
+          .filter((t) => t.length > 0 && t.length < 40)
+          .slice(0, 20)
+      : [],
   }
 
   const { data, error } = await supabase.from('products').insert(row).select().single()
