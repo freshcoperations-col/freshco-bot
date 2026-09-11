@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, updateOrderByReference, logMessage, getOrderByReference } from '@/lib/supabase'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
 import { verifyEventChecksum, mapStatus, type WompiEventPayload } from '@/lib/wompi'
+import { applyOrderStock } from '@/lib/inventory'
 import { emailPaymentConfirmed } from '@/lib/email'
 
 // Wompi POSTea eventos a esta URL. Configurar en el dashboard de Wompi:
@@ -43,6 +44,16 @@ async function processEvent(payload: WompiEventPayload): Promise<void> {
   const supabase = createServerClient()
   const paymentStatus = mapStatus(tx.status)
 
+  // Wompi manda varios transaction.updated por la misma transacción y reintenta
+  // ante cualquier respuesta que no sea 2xx. Si el pedido ya estaba en este
+  // mismo estado, no hay nada nuevo que hacer: salir antes de volver a
+  // notificar al cliente y reenviar el correo.
+  const previo = await getOrderByReference(supabase, tx.reference)
+  if (previo && previo.payment_status === paymentStatus) {
+    console.log(`[wompi] evento repetido para ${tx.reference} (ya está en ${paymentStatus}), skip`)
+    return
+  }
+
   const patch: Record<string, unknown> = {
     payment_status: paymentStatus,
     wompi_transaction_id: tx.id,
@@ -70,6 +81,16 @@ async function processEvent(payload: WompiEventPayload): Promise<void> {
 
   const phone = order.customer_phone
   const orderShort = order.id.slice(0, 8).toUpperCase()
+
+  // Inventario: un solo punto para todos los canales (ver lib/inventory.ts).
+  // Va ANTES de armar el mensaje a propósito: el stock no puede depender de
+  // que este estado tenga o no un texto que mandarle al cliente.
+  if (paymentStatus === 'approved') {
+    const res = await applyOrderStock(supabase, order)
+    console.log(`[inventory] orden=${order.id} aplicadas=${res.applied} repetidas=${res.skipped}`)
+    if (res.errors.length) console.error('[inventory] errores:', res.errors)
+  }
+
   let message: string | null = null
 
   switch (paymentStatus) {
@@ -106,55 +127,6 @@ async function processEvent(payload: WompiEventPayload): Promise<void> {
     })
   } catch (err) {
     console.error('Error notificando al cliente:', err)
-  }
-
-  // Decrementar inventario global al confirmar pago
-  if (paymentStatus === 'approved') {
-    type OrderItem = { product_id?: string; quantity?: number; size?: string; color?: string }
-    const items = (order.items ?? []) as OrderItem[]
-    for (const item of items) {
-      const size = item.size?.trim()
-      const color = item.color?.trim()
-      if (!size || !color) continue
-      const qty = item.quantity ?? 1
-
-      // Obtener el garment_type del producto para decrementar la fila correcta
-      let garmentType = ''
-      if (item.product_id) {
-        const { data: prod } = await supabase
-          .from('products')
-          .select('garment_type')
-          .eq('id', item.product_id)
-          .maybeSingle()
-        garmentType = prod?.garment_type ?? ''
-      }
-
-      const { error: rpcErr } = await supabase.rpc('decrement_global_inventory', {
-        p_garment_type: garmentType,
-        p_size: size,
-        p_color: color,
-        p_qty: qty,
-      })
-      if (rpcErr) {
-        console.error(
-          `[inventory] ERROR al decrementar ${garmentType}/${size}/${color} x${qty} orden=${order.id}:`,
-          rpcErr.message,
-        )
-      } else {
-        // Log del decremento exitoso
-        await supabase.from('inventory_log').insert({
-          garment_type: garmentType,
-          size,
-          color,
-          change_qty: -qty,
-          reason: 'sale',
-          order_id: order.id,
-        }).then(({ error: logErr }) => {
-          if (logErr) console.warn('[inventory_log] no se pudo registrar:', logErr.message)
-        })
-        console.log(`[inventory] decrementado ${garmentType}/${size}/${color} -${qty}`)
-      }
-    }
   }
 
   // Email de pago confirmado (awaited para que no se corte)

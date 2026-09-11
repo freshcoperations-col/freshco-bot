@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { emailOrderCreated } from '@/lib/email'
+import { createServerClient } from '@/lib/supabase'
+import { applyOrderStock } from '@/lib/inventory'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,6 +54,32 @@ export async function POST(request: NextRequest) {
     items: (body.items ?? []) as never,
     shippingAddress: body.shipping_address ?? null,
   }).catch((e) => console.error('Email orden web:', e))
+
+  // Inventario de los pedidos contraentrega de la webpage — el único canal
+  // que no descontaba nada. Los pedidos con Wompi NO se tocan acá: esos
+  // descuentan cuando el webhook confirma el pago.
+  //
+  // Los items se releen de la base, no del body: este endpoint es público.
+  if (body.order_id) {
+    try {
+      const supabase = createServerClient()
+      const { data: order } = await supabase
+        .from('orders')
+        .select('id, items, payment_status')
+        .eq('id', body.order_id)
+        .maybeSingle()
+
+      if (order && order.payment_status === 'cod') {
+        const inv = await applyOrderStock(supabase, {
+          id: order.id as string,
+          items: order.items as never,
+        })
+        if (inv.errors.length) console.error('[inventory] orden web:', inv.errors)
+      }
+    } catch (e) {
+      console.error('[inventory] orden web falló:', e)
+    }
+  }
 
   return NextResponse.json({ ok: true }, { headers })
 }

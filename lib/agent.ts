@@ -22,6 +22,7 @@ import {
   summarizeForAgent,
 } from './products-db'
 import { buildPaymentLink, newReference } from './wompi'
+import { applyOrderStock } from './inventory'
 import { sendWhatsAppImage } from './whatsapp'
 import { isValidIntent, type Intent } from './intents'
 
@@ -389,28 +390,12 @@ async function executeTool(
         if (order.payment_status === 'pending') {
           patch.payment_status = 'voided'
         }
-        // Re-incrementar stock si era orden manual (Contraentrega) no enviada
-        // Las órdenes Wompi decrementan solo en el webhook de pago aprobado,
-        // así que no hay que re-incrementar en ese caso.
-        const isManualOrder = order.payment_method === 'Contraentrega' ||
-          (order.payment_method != null && !order.payment_method.toLowerCase().includes('wompi'))
-        if (isManualOrder && !order.tracking_number) {
-          for (const item of (order.items ?? [])) {
-            const itemTyped = item as { product_id?: string; quantity?: number }
-            if (!itemTyped.product_id) continue
-            const { data: prod } = await supabase
-              .from('products')
-              .select('stock')
-              .eq('id', itemTyped.product_id)
-              .maybeSingle()
-            if (prod != null) {
-              const restoredStock = (prod.stock as number) + (itemTyped.quantity ?? 1)
-              await supabase
-                .from('products')
-                .update({ stock: restoredStock, out_of_stock: false })
-                .eq('id', itemTyped.product_id)
-            }
-          }
+        // Devolver el inventario. El libro sabe si este pedido había
+        // descontado algo, así que cancelar uno que nunca descontó (ej. un
+        // link de pago que nadie pagó) no infla el stock.
+        if (!order.tracking_number) {
+          const rev = await applyOrderStock(supabase, { id: order.id, items: order.items }, 'revert')
+          if (rev.errors.length) console.error('[inventory] cancelación:', rev.errors)
         }
       } else {
         return JSON.stringify({ error: `change_type inválido: ${changeType}` })
@@ -680,19 +665,10 @@ async function executeTool(
         return JSON.stringify({ error: 'No se pudo guardar el pedido. Intenta de nuevo.' })
       }
 
-      // Decrementar stock (pago manual — se asume que el cliente pagará)
-      const orderItems = input.items as Array<{ product_id?: string; quantity?: number }>
-      for (const item of orderItems) {
-        if (!item.product_id) continue
-        const supabaseStock = createServerClient()
-        const { data: prod } = await supabaseStock.from('products').select('stock').eq('id', item.product_id).maybeSingle()
-        if (prod != null) {
-          const newStock = Math.max(0, (prod.stock as number) - (item.quantity ?? 1))
-          const patch: Record<string, unknown> = { stock: newStock }
-          if (newStock === 0) patch.out_of_stock = true
-          await supabaseStock.from('products').update(patch).eq('id', item.product_id)
-        }
-      }
+      // Inventario: mismo punto único que el webhook de Wompi (lib/inventory.ts).
+      // Pago manual — se asume que el cliente pagará.
+      const inv = await applyOrderStock(supabase, { id: order.id, items: input.items as OrderItem[] })
+      if (inv.errors.length) console.error('[inventory] create_order:', inv.errors)
 
       // Email de pedido recibido (fire-and-forget)
       if (customerEmail) {

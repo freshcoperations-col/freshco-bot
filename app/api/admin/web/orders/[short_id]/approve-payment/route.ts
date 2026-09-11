@@ -4,6 +4,7 @@ import { sendWhatsAppMessage } from '@/lib/whatsapp'
 import { emailPaymentConfirmed } from '@/lib/email'
 import { verifyAdmin, bearerToken } from '@/lib/admin-auth'
 import { adminCors } from '@/lib/admin-cors'
+import { applyOrderStock } from '@/lib/inventory'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,39 +78,10 @@ export async function POST(
   // Decrementar inventario global
   type OrderItem = { product_id?: string; quantity?: number; size?: string; color?: string }
   const items = ((order.items ?? []) as OrderItem[])
-  for (const item of items) {
-    const size = item.size?.trim()
-    const color = item.color?.trim()
-    if (!size || !color) continue
-    const qty = item.quantity ?? 1
-
-    let garmentType = ''
-    if (item.product_id) {
-      const { data: prod } = await supabase
-        .from('products')
-        .select('garment_type')
-        .eq('id', item.product_id)
-        .maybeSingle()
-      garmentType = prod?.garment_type ?? ''
-    }
-
-    const { error: rpcErr } = await supabase.rpc('decrement_global_inventory', {
-      p_garment_type: garmentType,
-      p_size: size,
-      p_color: color,
-      p_qty: qty,
-    })
-    if (!rpcErr) {
-      await supabase.from('inventory_log').insert({
-        garment_type: garmentType,
-        size,
-        color,
-        change_qty: -qty,
-        reason: 'sale',
-        order_id: order.id,
-      })
-    }
-  }
+  // Inventario: mismo punto único que usa el webhook de Wompi. Si el pago ya
+  // se había aprobado antes, el libro lo detecta y no descuenta dos veces.
+  const inv = await applyOrderStock(supabase, { id: order.id as string, items })
+  if (inv.errors.length) warnings.push(`Inventario: ${inv.errors.join('; ')}`)
 
   // Email
   if (order.customer_email) {
