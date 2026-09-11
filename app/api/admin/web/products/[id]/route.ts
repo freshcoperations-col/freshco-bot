@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 import { verifyAdmin, bearerToken } from '@/lib/admin-auth'
 import { adminCors } from '@/lib/admin-cors'
+import { normalizeVariants, totalFromVariants, parseStockMode } from '@/lib/stock'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,22 +51,27 @@ export async function PUT(
       .filter((t) => t.length > 0 && t.length < 40)
       .slice(0, 20)
   }
-  if (Array.isArray(body.stock_variants)) {
-    type Variant = { size: string | null; color: string | null; quantity: number }
-    const variants = (body.stock_variants as Variant[]).map((v) => ({
-      size: v.size || null,
-      color: v.color || null,
-      quantity: Math.max(0, Number(v.quantity) || 0),
-    }))
+  // Stock. En modo 'variantes' el total SIEMPRE se recalcula como la suma de
+  // la tabla, así que products.stock sigue siendo el total real y nada de lo
+  // que hoy lo lee (tienda, listados, analíticas) se entera del cambio.
+  const stockMode = parseStockMode(body.stock_mode)
+  if (stockMode) patch.stock_mode = stockMode
+
+  const usaVariantes =
+    stockMode === 'variantes' || (stockMode === undefined && Array.isArray(body.stock_variants))
+
+  if (usaVariantes) {
+    const variants = normalizeVariants(body.stock_variants)
     patch.stock_variants = variants
-    // Compute total stock as sum of all variants
-    const total = variants.reduce((s, v) => s + v.quantity, 0)
+    const total = totalFromVariants(variants)
     patch.stock = total
     patch.out_of_stock = total === 0
   } else if (body.stock !== undefined) {
     const newStock = Number(body.stock)
     patch.stock = newStock
     patch.out_of_stock = newStock === 0
+    // Al volver a 'general' el detalle por talla/color deja de aplicar.
+    if (stockMode === 'general') patch.stock_variants = []
   }
 
   if (Object.keys(patch).length === 0) {

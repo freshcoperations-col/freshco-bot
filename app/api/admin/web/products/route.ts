@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 import { verifyAdmin, bearerToken } from '@/lib/admin-auth'
 import { adminCors } from '@/lib/admin-cors'
+import { normalizeVariants, totalFromVariants, parseStockMode } from '@/lib/stock'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,12 @@ export async function POST(request: NextRequest) {
   const garment_type = String(body.garment_type ?? '').trim()
   if (!garment_type) return NextResponse.json({ error: 'garment_type es requerido' }, { status: 400, headers: cors })
 
+  // Stock: en modo 'variantes' el total sale de la suma de las variantes,
+  // nunca del campo suelto. Así products.stock siempre es el total real.
+  const stockMode = parseStockMode(body.stock_mode) ?? 'general'
+  const variants = stockMode === 'variantes' ? normalizeVariants(body.stock_variants) : []
+  const stock = stockMode === 'variantes' ? totalFromVariants(variants) : Number(body.stock ?? 0)
+
   const supabase = createServerClient()
 
   const { data: existing } = await supabase.from('products').select('id').eq('id', id).maybeSingle()
@@ -50,7 +57,10 @@ export async function POST(request: NextRequest) {
     price: Number(body.price ?? 0),
     sale_price: body.sale_price != null ? Number(body.sale_price) : null,
     on_sale: Boolean(body.on_sale),
-    stock: Number(body.stock ?? 0),
+    stock,
+    stock_mode: stockMode,
+    stock_variants: variants,
+    out_of_stock: stock === 0,
     sizes: Array.isArray(body.sizes) ? body.sizes : [],
     colors: Array.isArray(body.colors) ? body.colors : [],
     collections: Array.isArray(body.collections) ? body.collections : [],
@@ -92,7 +102,7 @@ export async function GET(request: NextRequest) {
 
   let q = supabase
     .from('products_full')
-    .select('id, name, description, price, sale_price, on_sale, stock, available, out_of_stock, featured, free_shipping, colors, sizes, collections, collection_labels, garment_type, garment_type_label, material, printing_method, visual_tags, audience, images, created_at')
+    .select('id, name, description, price, sale_price, on_sale, stock, stock_mode, stock_variants, available, out_of_stock, featured, free_shipping, colors, sizes, collections, collection_labels, garment_type, garment_type_label, material, printing_method, visual_tags, audience, images, created_at')
     .order('created_at', { ascending: false })
     .limit(limit)
 
