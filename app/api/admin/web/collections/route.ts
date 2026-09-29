@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient()
   const { data, error } = await supabase
     .from('collections')
-    .select('id, label, description, image_url, sort_order, active, created_at')
+    .select('id, label, description, image_url, image_focus, show_title, sort_order, active, created_at')
     .order('sort_order', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: cors })
@@ -30,7 +30,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
-  if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+  if (!admin.ok || !admin.permissions.collections_edit) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+  }
 
   let body: Record<string, unknown>
   try { body = await request.json() } catch {

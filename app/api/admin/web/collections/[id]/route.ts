@@ -16,7 +16,9 @@ export async function PUT(
 ) {
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
-  if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+  if (!admin.ok || !admin.permissions.collections_edit) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+  }
 
   let body: Record<string, unknown>
   try { body = await request.json() } catch {
@@ -29,6 +31,15 @@ export async function PUT(
   if (body.description !== undefined) patch.description = body.description ? String(body.description) : null
   if (body.sort_order !== undefined) patch.sort_order = Number(body.sort_order)
   if (body.active !== undefined) patch.active = Boolean(body.active)
+  // Punto de enfoque de la imagen: "X% Y%", cada uno entre 0 y 100.
+  if (body.image_focus !== undefined) {
+    const m = /^(\d{1,3}(?:\.\d+)?)% (\d{1,3}(?:\.\d+)?)%$/.exec(String(body.image_focus).trim())
+    if (!m || Number(m[1]) > 100 || Number(m[2]) > 100) {
+      return NextResponse.json({ error: 'image_focus debe ser "X% Y%"' }, { status: 400, headers: cors })
+    }
+    patch.image_focus = `${Math.round(Number(m[1]))}% ${Math.round(Number(m[2]))}%`
+  }
+  if (body.show_title !== undefined) patch.show_title = Boolean(body.show_title)
 
   const { data, error } = await supabase
     .from('collections')
@@ -48,7 +59,9 @@ export async function DELETE(
 ) {
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
-  if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+  if (!admin.ok || !admin.permissions.collections_edit) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+  }
 
   // Verificar que no haya productos usando esta colección
   const supabase = createServerClient()

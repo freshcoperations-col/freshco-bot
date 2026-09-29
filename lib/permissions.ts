@@ -14,6 +14,7 @@ export const PERMISSION_DEFS = [
   { id: 'sizes_edit',        label: 'Gestionar guía de tallas',  section: 'Tallas' },
   { id: 'coupons_edit',      label: 'Gestionar cupones',         section: 'Cupones' },
   { id: 'presets_edit',      label: 'Gestionar presets',         section: 'Presets' },
+  { id: 'banners_edit',      label: 'Gestionar banners',         section: 'Banners' },
 ] as const
 
 export type PermissionId = typeof PERMISSION_DEFS[number]['id']
