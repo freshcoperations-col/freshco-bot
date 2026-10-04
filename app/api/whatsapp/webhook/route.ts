@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHmac, timingSafeEqual } from 'crypto'
 import { waitUntil } from '@vercel/functions'
 import { createServerClient, logMessage, getRecentHistory, isDuplicateMessage, isAIPaused, isRateLimited, setAIPaused } from '@/lib/supabase'
 import {
@@ -32,9 +33,20 @@ export async function GET(request: NextRequest) {
 // (sin esto, en serverless la función puede ser matada después del
 // `return`, dejando el procesamiento a medias en los mensajes 2..N).
 export async function POST(request: NextRequest) {
+  // Se lee el cuerpo como texto: la firma de Meta se calcula sobre los bytes
+  // exactos, y un JSON re-serializado no coincidiría.
+  const raw = await request.text()
+
+  // Sin esta verificación cualquiera podía enviar mensajes falsos al webhook
+  // y hacer que el bot escribiera, desde el número de Freshco, a quien quisiera.
+  if (!verifyMetaSignature(raw, request.headers.get('x-hub-signature-256'))) {
+    console.error('[wa] firma de Meta inválida — webhook rechazado')
+    return NextResponse.json({ error: 'Firma inválida' }, { status: 401 })
+  }
+
   let body: unknown
   try {
-    body = await request.json()
+    body = JSON.parse(raw)
   } catch {
     return NextResponse.json({ status: 'ok' })
   }
@@ -42,6 +54,24 @@ export async function POST(request: NextRequest) {
   waitUntil(processWebhook(body))
 
   return NextResponse.json({ status: 'ok' })
+}
+
+// Meta firma cada webhook con el App Secret de la app de Meta:
+// X-Hub-Signature-256 = "sha256=" + HMAC-SHA256(app_secret, cuerpo).
+// Si WHATSAPP_APP_SECRET no está configurada se acepta con advertencia, para no
+// apagar el bot antes de agregarla en Vercel.
+function verifyMetaSignature(raw: string, header: string | null): boolean {
+  const secret = process.env.WHATSAPP_APP_SECRET?.trim()
+  if (!secret) {
+    console.warn('[wa] WHATSAPP_APP_SECRET no configurada: el webhook NO verifica la firma de Meta')
+    return true
+  }
+  if (!header?.startsWith('sha256=')) return false
+  const expected = createHmac('sha256', secret).update(raw, 'utf8').digest('hex')
+  const given = header.slice('sha256='.length)
+  const a = Buffer.from(expected, 'hex')
+  const b = Buffer.from(given, 'hex')
+  return a.length === b.length && timingSafeEqual(a, b)
 }
 
 // Conversación nueva = es su primer mensaje, o el anterior fue hace más de

@@ -3,7 +3,7 @@ import { createServerClient, updateOrderByReference, logMessage, getOrderByRefer
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
 import { verifyEventChecksum, mapStatus, type WompiEventPayload } from '@/lib/wompi'
 import { applyOrderStock } from '@/lib/inventory'
-import { notifyTeam, orderAlert } from '@/lib/notify'
+import { cop, notifyTeam, orderAlert } from '@/lib/notify'
 import { emailPaymentConfirmed } from '@/lib/email'
 
 // Wompi POSTea eventos a esta URL. Configurar en el dashboard de Wompi:
@@ -53,6 +53,29 @@ async function processEvent(payload: WompiEventPayload): Promise<void> {
   if (previo && previo.payment_status === paymentStatus) {
     console.log(`[wompi] evento repetido para ${tx.reference} (ya está en ${paymentStatus}), skip`)
     return
+  }
+
+  // El monto pagado tiene que ser el del pedido. Si no coincide, alguien pagó
+  // un monto distinto al que se firmó o al que vale el pedido: no se aprueba,
+  // y el equipo revisa a mano.
+  if (paymentStatus === 'approved' && previo) {
+    const expected = previo.amount_in_cents ?? Math.round(Number(previo.total) * 100)
+    if (Number(tx.amount_in_cents) !== Number(expected)) {
+      console.error(`[wompi] MONTO NO COINCIDE ref=${tx.reference}: pagó ${tx.amount_in_cents}, esperado ${expected}`)
+      await updateOrderByReference(supabase, tx.reference, {
+        payment_status: 'error',
+        wompi_transaction_id: tx.id,
+        status: 'revision_monto',
+      } as never)
+      await notifyTeam({
+        title: '⚠️ Pago con monto distinto al pedido',
+        message: `Pedido #${previo.id.slice(0, 8).toUpperCase()}: pagó ${cop(Number(tx.amount_in_cents) / 100)} y el pedido es de ${cop(Number(expected) / 100)}. NO se aprobó: revísalo en Wompi.`,
+        tags: ['warning'],
+        priority: 5,
+        path: '/orders',
+      })
+      return
+    }
   }
 
   const patch: Record<string, unknown> = {

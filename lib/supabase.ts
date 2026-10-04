@@ -73,16 +73,6 @@ export function createServerClient(): SupabaseClient {
   })
 }
 
-// Browser client — usa anon key para el dashboard (con RLS)
-export function createBrowserClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !key) {
-    throw new Error('Variables NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY requeridas')
-  }
-  return createClient(url, key)
-}
-
 // ─── Helpers de base de datos ─────────────────────────────────────────────────
 
 export async function logMessage(

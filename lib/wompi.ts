@@ -76,6 +76,13 @@ export function buildPaymentLink(input: BuildPaymentLinkInput): string {
   return `${WOMPI_CHECKOUT_BASE}?${params.toString()}`
 }
 
+// Firma de integridad para el Widget de Wompi de la web. Solo la emite el
+// checkout del servidor, para el monto que el servidor calculó: así nadie puede
+// firmar un monto menor y pagar menos de lo que vale el pedido.
+export function signIntegrity(reference: string, amountInCents: number, currency = 'COP'): string {
+  return integritySignature(reference, amountInCents, currency, requireEnv('WOMPI_INTEGRITY_SECRET'))
+}
+
 // Genera una referencia única y rastreable para el bot.
 export function newReference(customerPhone: string): string {
   const phoneClean = customerPhone.replace(/[^\d]/g, '').slice(-6)

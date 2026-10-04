@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
+import { checkCoupon } from '@/lib/coupons'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,51 +46,10 @@ export async function POST(request: NextRequest) {
   const customerPhone = body.customer_phone?.toString().trim() || null
 
   const supabase = createServerClient()
-  const { data: coupon, error } = await supabase
-    .from('coupons')
-    .select('id, code, discount, description, active, usage_limit, used_count, expires_at, one_per_customer')
-    .eq('active', true)
-    .ilike('code', code)
-    .maybeSingle()
-
-  if (error || !coupon) {
-    return NextResponse.json({ valid: false, error: 'Código no válido o inactivo' }, { headers })
-  }
-
-  if (coupon.expires_at && new Date(coupon.expires_at as string) < new Date()) {
-    return NextResponse.json({ valid: false, error: 'Este código ya expiró' }, { headers })
-  }
-
-  if (coupon.usage_limit != null && (coupon.used_count as number) >= (coupon.usage_limit as number)) {
-    return NextResponse.json({ valid: false, error: 'Este código ya alcanzó su límite de usos' }, { headers })
-  }
-
-  // Verificar one_per_customer — si el cliente ya lo usó, rechazar
-  if (coupon.one_per_customer) {
-    let usedQuery = supabase
-      .from('coupon_uses')
-      .select('id')
-      .eq('coupon_id', coupon.id)
-
-    if (customerEmail) {
-      usedQuery = usedQuery.eq('customer_email', customerEmail)
-    } else if (customerPhone) {
-      usedQuery = usedQuery.eq('customer_phone', customerPhone)
-    }
-
-    if (customerEmail || customerPhone) {
-      const { data: existing } = await usedQuery.limit(1).maybeSingle()
-      if (existing) {
-        return NextResponse.json({
-          valid: false,
-          error: 'Este código es solo para tu primera compra y ya lo usaste anteriormente.',
-        }, { headers })
-      }
-    }
-  }
-
-  // Incrementar used_count (solo en ese momento — el uso real se graba al crear la orden)
-  await supabase.from('coupons').update({ used_count: (coupon.used_count as number) + 1 }).eq('id', coupon.id)
+  // Solo valida: NO consume el cupón (el uso se registra al crear el pedido).
+  const check = await checkCoupon(supabase, code, { email: customerEmail, phone: customerPhone })
+  if (!check.ok) return NextResponse.json({ valid: false, error: check.error }, { headers })
+  const coupon = check.coupon
 
   return NextResponse.json({
     valid: true,
