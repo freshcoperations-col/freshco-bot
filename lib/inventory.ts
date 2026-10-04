@@ -102,7 +102,7 @@ export async function applyOrderStock(
     try {
       const { data: product } = await supabase
         .from('products')
-        .select('garment_type, stock_mode')
+        .select('garment_type, stock_mode, is_test')
         .eq('id', item.productId)
         .maybeSingle()
 
@@ -142,8 +142,9 @@ export async function applyOrderStock(
 
       // ── Prendas en blanco (solo si se estampa contra pedido) ──────────
       // En modo 'variantes' el blanco ya se consumió al producir; descontarlo
-      // otra vez acá contaría dos veces la misma prenda física.
-      if (!esVariantes && item.size && item.color) {
+      // otra vez acá contaría dos veces la misma prenda física. Un producto
+      // de prueba no se fabrica: no gasta camisetas reales.
+      if (!esVariantes && !product.is_test && item.size && item.color) {
         const blancosOk = await registrar(supabase, {
           order_id: order.id,
           kind: 'blanks',
