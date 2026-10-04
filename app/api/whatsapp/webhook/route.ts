@@ -11,7 +11,7 @@ import {
 } from '@/lib/whatsapp'
 import { processMessage, type InboundImage } from '@/lib/agent'
 import { STORE_INFO } from '@/lib/store-info'
-import { customerNameFor, notifyTeam, teamNumbers } from '@/lib/notify'
+import { conversationTemplate, customerNameFor, notifyTeam, teamNumbers } from '@/lib/notify'
 
 // GET — Verificación del webhook de WhatsApp (Meta)
 export async function GET(request: NextRequest) {
@@ -236,6 +236,7 @@ async function processWebhook(body: unknown): Promise<void> {
               tags: ['raised_hand'],
               priority: 4,
               path: '/conversations',
+              template: conversationTemplate(`${name ? `${name} ` : ''}+${phone}`, 'escribió y el chat está en modo manual'),
             })
             continue
           }
@@ -317,6 +318,7 @@ async function processWebhook(body: unknown): Promise<void> {
               tags: ['bell'],
               priority: 4,
               path: '/conversations',
+              template: conversationTemplate(`${name ? `${name} ` : ''}+${phone}`, 'pidió hablar con un asesor'),
             })
           } else if (newConversation) {
             // Conversación nueva (no aviso si pidió asesor: esa alerta ya llegó).
@@ -326,6 +328,7 @@ async function processWebhook(body: unknown): Promise<void> {
               message: `📱 +${phone}\n💬 "${storedContent.slice(0, 200)}"`,
               tags: ['speech_balloon'],
               path: '/conversations',
+              template: conversationTemplate(`${name ? `${name} ` : ''}+${phone}`, 'inició una conversación nueva'),
             })
           }
         }

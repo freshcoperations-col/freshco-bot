@@ -10,8 +10,12 @@ import { sendWhatsAppRaw } from '@/lib/whatsapp'
 // 573001234567,573109876543).
 //   · Si esa persona le escribió al bot en las últimas 24 h, va un mensaje
 //     normal.
-//   · Si no, WhatsApp exige una plantilla aprobada: TEAM_ALERT_TEMPLATE
-//     (por defecto "alerta_equipo"), con dos variables: título y detalle.
+//   · Si no, WhatsApp exige una plantilla aprobada (categoría Utilidad). Meta
+//     solo aprueba como Utilidad textos concretos, así que hay una por tipo:
+//       pedido_equipo        → {{1}} pedido, {{2}} cliente, {{3}} estado, {{4}} total
+//       conversacion_equipo  → {{1}} cliente, {{2}} motivo
+//     Una alerta sin plantilla propia solo llega por WhatsApp si la ventana
+//     de 24 h está abierta (y siempre por ntfy, si está configurado).
 //
 // Respaldo opcional: ntfy (https://ntfy.sh), si NTFY_TOPIC está configurada.
 // Para dejar de usarlo basta con borrar esa variable en Vercel.
@@ -31,6 +35,19 @@ export interface TeamAlert {
   tags?: string[]       // emojis de ntfy, ej. ['bell'], ['moneybag']
   priority?: 1 | 2 | 3 | 4 | 5 // 3 = normal, 4 = alta (suena distinto)
   path?: string         // pantalla del admin que abre al tocar la alerta
+  // Plantilla de WhatsApp para cuando la ventana de 24 h está cerrada.
+  template?: { name: string; params: string[] }
+}
+
+export function orderTemplate(o: { id: string; customer_name: string | null; total: number }, estado: string) {
+  return {
+    name: 'pedido_equipo',
+    params: [o.id.slice(0, 8).toUpperCase(), o.customer_name || 'Cliente', estado, cop(o.total)],
+  }
+}
+
+export function conversationTemplate(cliente: string, motivo: string) {
+  return { name: 'conversacion_equipo', params: [cliente, motivo] }
 }
 
 export function teamNumbers(): string[] {
@@ -59,23 +76,24 @@ async function sendToTeamMember(to: string, alert: TeamAlert): Promise<void> {
     console.error(`[alerta] WhatsApp a ${to} falló:`, text.error)
     return
   }
-  // Ventana de 24 h cerrada: plantilla aprobada.
+  // Ventana de 24 h cerrada: solo se puede con plantilla aprobada.
+  if (!alert.template) {
+    console.warn(`[alerta] ventana cerrada con ${to} y la alerta no tiene plantilla: "${alert.title}"`)
+    return
+  }
   const tpl = await sendWhatsAppRaw({
     to,
     type: 'template',
     template: {
-      name: process.env.TEAM_ALERT_TEMPLATE ?? 'alerta_equipo',
+      name: alert.template.name,
       language: { code: 'es' },
       components: [{
         type: 'body',
-        parameters: [
-          { type: 'text', text: templateParam(alert.title) },
-          { type: 'text', text: templateParam(`${alert.message}${link ? ` ${link}` : ''}`) },
-        ],
+        parameters: alert.template.params.map((p) => ({ type: 'text', text: templateParam(p) })),
       }],
     },
   })
-  if (!tpl.ok) console.error(`[alerta] plantilla a ${to} falló:`, tpl.error)
+  if (!tpl.ok) console.error(`[alerta] plantilla ${alert.template.name} a ${to} falló:`, tpl.error)
 }
 
 async function sendNtfy(topic: string, alert: TeamAlert): Promise<void> {
@@ -152,6 +170,7 @@ export function orderAlert(kind: 'paid' | 'cod', o: {
         tags: ['moneybag'],
         priority: 4,
         path: '/orders',
+        template: orderTemplate(o, 'pago confirmado'),
       }
     : {
         title: `🛍 Pedido contraentrega: ${cop(o.total)}`,
@@ -159,5 +178,6 @@ export function orderAlert(kind: 'paid' | 'cod', o: {
         tags: ['package'],
         priority: 4,
         path: '/orders',
+        template: orderTemplate(o, 'nuevo pedido contraentrega'),
       }
 }

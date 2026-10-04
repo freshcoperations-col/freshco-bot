@@ -3,7 +3,7 @@ import { createServerClient, updateOrderByReference, logMessage, getOrderByRefer
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
 import { verifyEventChecksum, mapStatus, type WompiEventPayload } from '@/lib/wompi'
 import { applyOrderStock } from '@/lib/inventory'
-import { cop, notifyTeam, orderAlert } from '@/lib/notify'
+import { cop, notifyTeam, orderAlert, orderTemplate } from '@/lib/notify'
 import { emailPaymentConfirmed } from '@/lib/email'
 
 // Wompi POSTea eventos a esta URL. Configurar en el dashboard de Wompi:
@@ -73,6 +73,10 @@ async function processEvent(payload: WompiEventPayload): Promise<void> {
         tags: ['warning'],
         priority: 5,
         path: '/orders',
+        template: orderTemplate(
+          { id: previo.id, customer_name: previo.customer_name ?? null, total: Number(expected) / 100 },
+          'pago con monto distinto, requiere revisión',
+        ),
       })
       return
     }

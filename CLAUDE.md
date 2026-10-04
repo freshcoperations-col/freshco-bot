@@ -41,7 +41,7 @@ No tiene interfaz propia: `app/page.tsx` es solo una página de estado.
 - `products-db.ts`, `product-fields.ts`, `product-catalog.ts`: catálogo
 - `inventory.ts`: **punto único de stock**. `applyOrderStock` (venta o reversa) es idempotente y queda en el libro de movimientos.
 - `coupons.ts`, `shipping.ts`, `wompi.ts`, `email.ts`
-- `notify.ts`: alertas al equipo por WhatsApp (`TEAM_WHATSAPP_NUMBERS`; fuera de la ventana de 24 h usa la plantilla `TEAM_ALERT_TEMPLATE`, por defecto `alerta_equipo`) y, si existe `NTFY_TOPIC`, también por ntfy
+- `notify.ts`: alertas al equipo por WhatsApp (`TEAM_WHATSAPP_NUMBERS`; fuera de la ventana de 24 h usa las plantillas `pedido_equipo` y `conversacion_equipo`) y, si existe `NTFY_TOPIC`, también por ntfy
 - `store-info.ts`: datos de la tienda + horario de asesores (`humanAvailability`)
 - `admin-auth.ts`, `admin-cors.ts`, `permissions.ts`: acceso al admin
 - `storage-images.ts`: URLs de imágenes en Supabase Storage
