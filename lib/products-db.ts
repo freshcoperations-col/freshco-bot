@@ -138,9 +138,10 @@ function normalize(row: Record<string, unknown>): Product {
     material: (row.material as string | null) ?? null,
     printing_method: (row.printing_method as string | null) ?? null,
     stock: Number(row.stock ?? 0),
-    // Visible solo si el admin no lo ocultó Y no está únicamente en colecciones
-    // desactivadas (collection_active viene de la vista products_full).
-    available: row.available !== false && row.collection_active !== false,
+    // Visible solo si el admin no lo ocultó, no está únicamente en colecciones
+    // desactivadas (collection_active viene de la vista products_full) y no es
+    // un producto de prueba (esos solo se compran desde su link en la web).
+    available: row.available !== false && row.collection_active !== false && !row.is_test,
     out_of_stock: !!(row.out_of_stock),
     featured: !!row.featured,
     free_shipping: !!(row.free_shipping),

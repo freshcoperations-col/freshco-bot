@@ -20,7 +20,8 @@ No tiene interfaz propia: `app/page.tsx` es solo una página de estado.
 ## Base de datos — Supabase proyecto **WEB**
 - El proyecto viejo `freshco-bot` está pausado: no usarlo. Ojo: la `.env.local` local de este repo todavía apunta a él. Las variables buenas están en Vercel.
 - **Migraciones**: archivos `migration-AAAA-MM-DD-*.sql` en la raíz. Las corre el dueño a mano en el SQL Editor. Si el código nuevo lee columnas nuevas, la migración va **antes** del deploy.
-- `products_full` es una vista con `p.*`, que se expande al crearla: si agregas columnas a `products`, hay que **recrear la vista**. La última definición está en `migration-2026-10-04-collection-active.sql`.
+- `products.is_test`: producto de prueba. No sale en listas, búsqueda, más vendidos, bot ni analíticas; sí se compra por link directo.
+- `products_full` es una vista con `p.*`, que se expande al crearla: si agregas columnas a `products`, hay que **recrear la vista**. La última definición está en `migration-2026-10-04-test-products.sql`.
 
 ### Permisos (desde `migration-2026-10-04-security-lockdown.sql`)
 - El bot usa la **llave de servicio** (`createServerClient`), que no pasa por RLS.
@@ -40,7 +41,7 @@ No tiene interfaz propia: `app/page.tsx` es solo una página de estado.
 - `products-db.ts`, `product-fields.ts`, `product-catalog.ts`: catálogo
 - `inventory.ts`: **punto único de stock**. `applyOrderStock` (venta o reversa) es idempotente y queda en el libro de movimientos.
 - `coupons.ts`, `shipping.ts`, `wompi.ts`, `email.ts`
-- `notify.ts`: alertas al celular del equipo vía ntfy (`NTFY_TOPIC`)
+- `notify.ts`: alertas al equipo por WhatsApp (`TEAM_WHATSAPP_NUMBERS`; fuera de la ventana de 24 h usa la plantilla `TEAM_ALERT_TEMPLATE`, por defecto `alerta_equipo`) y, si existe `NTFY_TOPIC`, también por ntfy
 - `store-info.ts`: datos de la tienda + horario de asesores (`humanAvailability`)
 - `admin-auth.ts`, `admin-cors.ts`, `permissions.ts`: acceso al admin
 - `storage-images.ts`: URLs de imágenes en Supabase Storage

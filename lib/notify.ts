@@ -1,16 +1,23 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { sendWhatsAppRaw } from '@/lib/whatsapp'
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Alertas al celular del equipo vía ntfy (app gratuita, https://ntfy.sh)
+// Alertas al equipo: cliente que pide asesor, conversación nueva, pago
+// confirmado, pedido contraentrega, pago con monto distinto.
 //
-// Todos los avisos al equipo pasan por aquí: cliente que pide asesor,
-// conversación nueva, pago confirmado, pedido contraentrega. Para recibirlas
-// basta con suscribirse al tema NTFY_TOPIC desde la app de ntfy; varias
-// personas pueden suscribirse al mismo tema.
+// Canal principal: WhatsApp. El bot le escribe desde el número de Freshco a
+// cada número de TEAM_WHATSAPP_NUMBERS (separados por coma, con indicativo:
+// 573001234567,573109876543).
+//   · Si esa persona le escribió al bot en las últimas 24 h, va un mensaje
+//     normal.
+//   · Si no, WhatsApp exige una plantilla aprobada: TEAM_ALERT_TEMPLATE
+//     (por defecto "alerta_equipo"), con dos variables: título y detalle.
 //
-// Se publica en JSON y no con cabeceras HTTP: una cabecera no admite emojis
-// ni caracteres fuera de Latin-1, así que un cliente con un emoji en el nombre
-// hacía fallar la alerta en silencio.
+// Respaldo opcional: ntfy (https://ntfy.sh), si NTFY_TOPIC está configurada.
+// Para dejar de usarlo basta con borrar esa variable en Vercel.
+//
+// Un grupo de WhatsApp necesitaría cuenta oficial (OBA) y máximo 8 personas;
+// cuando exista, el cambio es el destino del envío, no el resto.
 //
 // Nunca lanza: una alerta que no sale no puede tumbar la respuesta al cliente
 // ni la confirmación de un pago.
@@ -26,13 +33,54 @@ export interface TeamAlert {
   path?: string         // pantalla del admin que abre al tocar la alerta
 }
 
-export async function notifyTeam(alert: TeamAlert): Promise<void> {
-  const topic = process.env.NTFY_TOPIC?.trim()
-  if (!topic) {
-    console.error('[ntfy] NTFY_TOPIC no está configurada — alerta no enviada:', alert.title)
+export function teamNumbers(): string[] {
+  return (process.env.TEAM_WHATSAPP_NUMBERS ?? '')
+    .split(',')
+    .map((n) => n.replace(/\D/g, ''))
+    .filter((n) => n.length >= 10)
+}
+
+// Las variables de una plantilla no admiten saltos de línea, tabulaciones ni
+// más de 4 espacios seguidos: Meta rechaza el envío.
+function templateParam(text: string): string {
+  return text.replace(/\s*\n+\s*/g, ' · ').replace(/\s{2,}/g, ' ').trim().slice(0, 900) || '-'
+}
+
+async function sendToTeamMember(to: string, alert: TeamAlert): Promise<void> {
+  const link = alert.path ? `${ADMIN_URL}${alert.path}` : ''
+  const text = await sendWhatsAppRaw({
+    to,
+    type: 'text',
+    text: { body: `*${alert.title}*\n${alert.message}${link ? `\n\n${link}` : ''}`, preview_url: false },
+  })
+  if (text.ok) return
+
+  if (text.code !== 131047) {
+    console.error(`[alerta] WhatsApp a ${to} falló:`, text.error)
     return
   }
+  // Ventana de 24 h cerrada: plantilla aprobada.
+  const tpl = await sendWhatsAppRaw({
+    to,
+    type: 'template',
+    template: {
+      name: process.env.TEAM_ALERT_TEMPLATE ?? 'alerta_equipo',
+      language: { code: 'es' },
+      components: [{
+        type: 'body',
+        parameters: [
+          { type: 'text', text: templateParam(alert.title) },
+          { type: 'text', text: templateParam(`${alert.message}${link ? ` ${link}` : ''}`) },
+        ],
+      }],
+    },
+  })
+  if (!tpl.ok) console.error(`[alerta] plantilla a ${to} falló:`, tpl.error)
+}
+
+async function sendNtfy(topic: string, alert: TeamAlert): Promise<void> {
   try {
+    // JSON y no cabeceras HTTP: una cabecera no admite emojis.
     const res = await fetch('https://ntfy.sh/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -49,6 +97,19 @@ export async function notifyTeam(alert: TeamAlert): Promise<void> {
   } catch (err) {
     console.error('[ntfy] no se pudo enviar:', err)
   }
+}
+
+export async function notifyTeam(alert: TeamAlert): Promise<void> {
+  const numbers = teamNumbers()
+  const topic = process.env.NTFY_TOPIC?.trim()
+  if (numbers.length === 0 && !topic) {
+    console.error('[alerta] sin TEAM_WHATSAPP_NUMBERS ni NTFY_TOPIC — alerta no enviada:', alert.title)
+    return
+  }
+  await Promise.all([
+    ...numbers.map((n) => sendToTeamMember(n, alert)),
+    ...(topic ? [sendNtfy(topic, alert)] : []),
+  ])
 }
 
 // El último nombre que dio este cliente en un pedido, para que la alerta diga

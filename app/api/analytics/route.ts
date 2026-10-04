@@ -27,7 +27,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500, headers: cors })
   }
 
-  const rows = orders ?? []
+  // Los pedidos que solo traen productos de prueba no son ventas: fuera de
+  // las analíticas (siguen en la lista de pedidos del admin).
+  const { data: testProducts } = await supabase.from('products').select('id').eq('is_test', true)
+  const testIds = new Set((testProducts ?? []).map((p) => String(p.id)))
+  const rows = (orders ?? []).filter((o) => {
+    const items = (o.items as Array<{ product_id?: string }> | null) ?? []
+    return items.length === 0 || items.some((i) => !i.product_id || !testIds.has(i.product_id))
+  })
 
   // ── KPIs ──────────────────────────────────────────────────────────────────
   const approved = rows.filter((o) => o.payment_status === 'approved')

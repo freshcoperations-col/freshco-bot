@@ -222,6 +222,10 @@ export async function POST(request: NextRequest) {
         reference,
         amount_in_cents: amountInCents,
         currency: 'COP',
+        // La llave pública va junto con la firma: así las dos salen siempre
+        // del mismo ambiente (pruebas o producción) y se cambian en un solo
+        // lugar, las variables del bot.
+        public_key: process.env.WOMPI_PUBLIC_KEY,
         signature: signIntegrity(reference!, amountInCents, 'COP'),
       },
     },

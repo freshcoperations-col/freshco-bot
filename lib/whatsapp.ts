@@ -268,3 +268,27 @@ export async function downloadWhatsAppMedia(
     return null
   }
 }
+
+// Envío crudo: no lanza y devuelve el código de error de Meta, para que quien
+// llama decida qué hacer (ej. 131047 = ventana de 24 h cerrada → plantilla).
+export async function sendWhatsAppRaw(
+  payload: Record<string, unknown>,
+): Promise<{ ok: true } | { ok: false; code?: number; error: string }> {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
+  if (!phoneNumberId || !accessToken) {
+    return { ok: false, error: 'WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_ACCESS_TOKEN no configuradas' }
+  }
+  try {
+    const res = await fetch(`${WHATSAPP_API_URL}/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', ...payload }),
+    })
+    if (res.ok) return { ok: true }
+    const body = (await res.json().catch(() => ({}))) as { error?: { code?: number; message?: string } }
+    return { ok: false, code: body.error?.code, error: body.error?.message ?? `HTTP ${res.status}` }
+  } catch (err) {
+    return { ok: false, error: String(err) }
+  }
+}

@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
     available: body.available !== false,
     featured: Boolean(body.featured),
     free_shipping: Boolean(body.free_shipping),
+    is_test: Boolean(body.is_test),
     audience: body.audience ? String(body.audience) : 'unisex',
     // Se pasan al duplicar un producto: el arte es el mismo, así que las
     // etiquetas visuales siguen siendo válidas y el bot puede encontrarlo
@@ -102,7 +103,7 @@ export async function GET(request: NextRequest) {
 
   let q = supabase
     .from('products_full')
-    .select('id, name, description, price, sale_price, on_sale, stock, stock_mode, stock_variants, available, collection_active, out_of_stock, featured, free_shipping, colors, sizes, collections, collection_labels, garment_type, garment_type_label, material, printing_method, visual_tags, audience, images, created_at')
+    .select('id, name, description, price, sale_price, on_sale, stock, stock_mode, stock_variants, available, collection_active, out_of_stock, featured, free_shipping, is_test, colors, sizes, collections, collection_labels, garment_type, garment_type_label, material, printing_method, visual_tags, audience, images, created_at')
     .order('created_at', { ascending: false })
     .limit(limit)
 

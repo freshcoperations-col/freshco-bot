@@ -11,7 +11,7 @@ import {
 } from '@/lib/whatsapp'
 import { processMessage, type InboundImage } from '@/lib/agent'
 import { STORE_INFO } from '@/lib/store-info'
-import { customerNameFor, notifyTeam } from '@/lib/notify'
+import { customerNameFor, notifyTeam, teamNumbers } from '@/lib/notify'
 
 // GET — Verificación del webhook de WhatsApp (Meta)
 export async function GET(request: NextRequest) {
@@ -211,7 +211,9 @@ async function processWebhook(body: unknown): Promise<void> {
 
           // ¿Empieza una conversación? (primer mensaje tras varias horas de
           // silencio). Se calcula ahora y se avisa al final, después de responder.
-          const newConversation = await isNewConversation(supabase, phone)
+          // Si quien escribe es del equipo (probando el bot), no se le avisa al
+          // equipo de una "conversación nueva" consigo mismo.
+          const newConversation = !teamNumbers().includes(phone) && (await isNewConversation(supabase, phone))
 
           // 2. Marcar como leído + "Freshco está escribiendo..." mientras pensamos
           await markAsReadWithTyping(waMessageId)
