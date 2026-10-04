@@ -1,12 +1,49 @@
 export const STORE_INFO = {
   name: 'Freshco',
-  tagline: 'Ropa urbana — Bogotá, Colombia',
+  tagline: 'Ropa urbana — marca 100% online, con base en Bogotá',
   city: 'Bogotá',
   country: 'Colombia',
-  instagram: '@freshco.col',
-  schedule: 'Lunes a sábado 9am–8pm, domingos 10am–6pm',
+  instagram: '@freshco_design',
+  tiktok: '@freshco_design',
+  website: 'https://freshco-design.com',
+  // Horario de los ASESORES HUMANOS. El asistente del chat atiende 24/7.
+  humanSchedule: 'lunes a sábado de 9 a. m. a 8 p. m., y domingos de 10 a. m. a 6 p. m.',
 }
 
+// Mismo horario, en datos, para saber si en este momento hay asesores.
+// Índice = día de la semana (0 = domingo). Horas en hora de Bogotá.
+const HUMAN_HOURS: Array<{ open: number; close: number }> = [
+  { open: 10, close: 18 }, // domingo
+  { open: 9, close: 20 },  // lunes
+  { open: 9, close: 20 },
+  { open: 9, close: 20 },
+  { open: 9, close: 20 },
+  { open: 9, close: 20 },
+  { open: 9, close: 20 },  // sábado
+]
+
+function hourLabel(h: number): string {
+  if (h === 12) return '12 m.'
+  return h < 12 ? `${h} a. m.` : `${h - 12} p. m.`
+}
+
+// ¿Hay asesores humanos ahora? Y si no, cuándo vuelven, en palabras.
+// Bogotá es UTC-5 todo el año (sin horario de verano), así que basta con
+// restar 5 horas, sin depender de la zona horaria del servidor.
+export function humanAvailability(now: Date = new Date()): { open: boolean; nextOpen: string } {
+  const bogota = new Date(now.getTime() - 5 * 60 * 60 * 1000)
+  const day = bogota.getUTCDay()
+  const hour = bogota.getUTCHours() + bogota.getUTCMinutes() / 60
+  const today = HUMAN_HOURS[day]
+
+  if (hour >= today.open && hour < today.close) return { open: true, nextOpen: 'ahora' }
+  if (hour < today.open) return { open: false, nextOpen: `hoy desde las ${hourLabel(today.open)}` }
+  const tomorrow = HUMAN_HOURS[(day + 1) % 7]
+  return { open: false, nextOpen: `mañana desde las ${hourLabel(tomorrow.open)}` }
+}
+
+// Todos los pagos con tarjeta, PSE, Nequi, Bancolombia o Daviplata van por el
+// link de Wompi. No se aceptan transferencias directas.
 export const PAYMENT_METHODS = [
   {
     method: 'Link de pago Wompi (recomendado)',
@@ -19,7 +56,7 @@ export const PAYMENT_METHODS = [
   },
   {
     method: 'Contraentrega',
-    details: 'Disponible a todo el país. Pagas en efectivo al recibir tu pedido.',
+    details: 'Disponible a todo el país, sin costo adicional. Pagas en efectivo al recibir tu pedido.',
     instructions:
       'Confirmas el pedido y lo despachamos. El pago lo haces directamente al mensajero o transportadora al momento de la entrega.',
   },

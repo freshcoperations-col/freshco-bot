@@ -9,6 +9,7 @@ import {
   type WhatsAppWebhookPayload,
 } from '@/lib/whatsapp'
 import { processMessage, type InboundImage } from '@/lib/agent'
+import { STORE_INFO } from '@/lib/store-info'
 
 // GET — Verificación del webhook de WhatsApp (Meta)
 export async function GET(request: NextRequest) {
@@ -200,7 +201,7 @@ async function processWebhook(body: unknown): Promise<void> {
           } catch (error) {
             console.error('Error en el agente:', error)
             agentResponse =
-              'Lo siento, tuve un problema técnico momentáneo. Por favor intenta de nuevo o escríbenos en @freshco.col 🙏'
+              `Lo siento, tuve un problema técnico momentáneo. Por favor intenta de nuevo o escríbenos en Instagram ${STORE_INFO.instagram} 🙏`
             intent = 'otro'
           }
 

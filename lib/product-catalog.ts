@@ -54,19 +54,19 @@ export const SIZE_GUIDE = {
 
 export const SHIPPING_INFO = {
   bogota: {
-    tiempo: '1-2 días hábiles',
+    tiempo: '2-3 días hábiles',
     costo: '$10.000',
     zona: 'Bogotá',
   },
   regional: {
-    tiempo: '2-3 días hábiles',
+    tiempo: '3-4 días hábiles',
     costo: '$12.000',
     zona: 'Municipios aledaños: Soacha, Chía, Cajicá, Zipaquirá, Facatativá, Madrid, Mosquera, Funza, La Calera, Sibaté, Sopó, Cota, Tocancipá y otros municipios de Cundinamarca cercanos a Bogotá',
   },
   nacional: {
-    tiempo: '3-5 días hábiles',
+    tiempo: '4-5 días hábiles',
     costo: '$15.000',
     zona: 'Resto de Colombia — Medellín, Cali, Barranquilla, Bucaramanga, Cartagena y cualquier otro municipio',
   },
-  nota: 'Despachamos con Servientrega y Coordinadora. Te enviamos el número de guía cuando tu pedido salga. Si algún producto tiene envío gratis, se aplica sin importar la ciudad.',
+  nota: 'Los tiempos son el total estimado desde que se confirma el pedido, e incluyen la producción: cada prenda se hace bajo pedido. Son días hábiles y pueden variar por la transportadora. Despachamos con Servientrega y Coordinadora. Te enviamos el número de guía cuando tu pedido salga. Si algún producto tiene envío gratis, se aplica sin importar la ciudad.',
 }

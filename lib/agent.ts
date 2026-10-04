@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { emailOrderCreated } from './email'
 import { buildSystemPrompt } from './system-prompt'
 import { SIZE_GUIDE, SHIPPING_INFO, DTF_CARE } from './product-catalog'
-import { PAYMENT_METHODS } from './store-info'
+import { PAYMENT_METHODS, STORE_INFO } from './store-info'
 import { getShippingCost, getShippingZone, SHIPPING_COSTS, SHIPPING_TIMES } from './shipping'
 import {
   createServerClient,
@@ -239,7 +239,7 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: 'create_order',
     description:
-      'Crea un pedido SIN link de pago — úsalo solo para métodos manuales como Nequi/Bancolombia transferencia o contraentrega. Para pagos con tarjeta usa create_payment_link.',
+      'Crea un pedido SIN link de pago — úsalo ÚNICAMENTE para contraentrega. Todos los demás pagos (tarjeta, PSE, Nequi, Bancolombia, Daviplata) van por create_payment_link: no aceptamos transferencias directas.',
     input_schema: {
       type: 'object',
       properties: {
@@ -260,7 +260,7 @@ const TOOLS: Anthropic.Tool[] = [
         },
         total: { type: 'number' },
         shipping_address: { type: 'string' },
-        payment_method: { type: 'string', description: 'Nequi, Bancolombia, Daviplata, Contraentrega.' },
+        payment_method: { type: 'string', description: 'Siempre "Contraentrega".' },
         customer_name: { type: 'string' },
         customer_email: { type: 'string', description: 'Correo electrónico del cliente.' },
         coupon_code: { type: 'string', description: 'Código de cupón aplicado (si aplica).' },
@@ -364,7 +364,8 @@ async function executeTool(
           action_required: 'ESCALAR_A_ASESOR',
         })
       }
-      if (order.payment_status !== 'approved' && order.payment_status !== 'pending') {
+      // 'cod' = contraentrega: también se puede modificar antes del despacho.
+      if (!['approved', 'pending', 'cod'].includes(order.payment_status)) {
         return JSON.stringify({
           error: `El pedido #${shortId} está en estado ${order.payment_status} y no se puede modificar.`,
         })
@@ -386,6 +387,14 @@ async function executeTool(
         if (!newValue) return JSON.stringify({ error: 'Falta new_value (dirección).' })
         patch.shipping_address = newValue
       } else if (changeType === 'cancel') {
+        // Un pedido pagado implica devolver el dinero en Wompi: eso lo hace un
+        // asesor, nunca el bot. Decisión del dueño, 2026-10-04.
+        if (order.payment_status === 'approved') {
+          return JSON.stringify({
+            error: `El pedido #${shortId} ya está pagado: la cancelación y el reembolso los gestiona un asesor.`,
+            action_required: 'ESCALAR_A_ASESOR',
+          })
+        }
         patch.status = 'cancelado'
         if (order.payment_status === 'pending') {
           patch.payment_status = 'voided'
@@ -696,6 +705,39 @@ async function executeTool(
 
 // ─── Función principal del agente ─────────────────────────────────────────────
 
+async function loadLiveStoreData(): Promise<import('./system-prompt').LiveStoreData> {
+  try {
+    const supabase = createServerClient()
+    const [collections, garmentTypes, { data: coupons }] = await Promise.all([
+      getCollections(),
+      getGarmentTypes(),
+      supabase
+        .from('coupons')
+        .select('code, discount, description, one_per_customer, usage_limit, used_count, expires_at')
+        .eq('active', true),
+    ])
+    const now = Date.now()
+    return {
+      collections,
+      garmentTypes,
+      // Solo los que de verdad se pueden usar: ni vencidos ni agotados.
+      coupons: (coupons ?? [])
+        .filter((c) => !c.expires_at || new Date(c.expires_at as string).getTime() > now)
+        .filter((c) => c.usage_limit == null || (c.used_count as number) < (c.usage_limit as number))
+        .map((c) => ({
+          code: String(c.code),
+          discount: Number(c.discount),
+          description: (c.description as string | null) ?? null,
+          one_per_customer: Boolean(c.one_per_customer),
+        })),
+    }
+  } catch (err) {
+    // Sin datos en vivo el bot sigue funcionando: usa las herramientas.
+    console.error('No se pudieron cargar datos en vivo para el prompt:', err)
+    return { collections: [], garmentTypes: [], coupons: [] }
+  }
+}
+
 export interface InboundImage {
   base64: string
   mimeType: string
@@ -739,7 +781,10 @@ export async function processMessage(
     console.error('No se pudo prefetch customer history:', err)
   }
 
-  const systemPrompt = buildSystemPrompt(isReturningCustomer, returningCtx, savedCustomerData)
+  // Colecciones, tipos de prenda y cupones se leen de la base en cada
+  // conversación: el prompt nunca queda desactualizado respecto al admin.
+  const live = await loadLiveStoreData()
+  const systemPrompt = buildSystemPrompt(isReturningCustomer, returningCtx, savedCustomerData, live)
 
   const userBlocks: Anthropic.ContentBlockParam[] = []
   if (image) {
@@ -784,7 +829,7 @@ export async function processMessage(
       console.error('Error llamando Claude API:', error)
       return {
         response:
-          'Lo siento, tuve un problema técnico. Por favor intenta de nuevo o escríbenos en Instagram @freshco.col 🙏',
+          `Lo siento, tuve un problema técnico. Por favor intenta de nuevo o escríbenos en Instagram ${STORE_INFO.instagram} 🙏`,
         intent: 'otro',
         requestedHuman: false,
       }
@@ -834,7 +879,7 @@ export async function processMessage(
 
   return {
     response:
-      'Tuve un problema procesando tu consulta. Por favor contáctanos en @freshco.col 🙏',
+      `Tuve un problema procesando tu consulta. Por favor contáctanos en Instagram ${STORE_INFO.instagram} 🙏`,
     intent: 'otro',
     requestedHuman: false,
   }

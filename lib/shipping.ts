@@ -15,10 +15,12 @@ export const SHIPPING_COSTS: Record<ShippingZone, number> = {
   nacional: 15000,
 }
 
+// Tiempo TOTAL estimado de entrega, con la producción incluida (cada prenda
+// se hace bajo pedido). Confirmado por el dueño el 2026-10-04.
 export const SHIPPING_TIMES: Record<ShippingZone, string> = {
-  bogota: '1-2 días hábiles',
-  regional: '2-3 días hábiles',
-  nacional: '3-5 días hábiles',
+  bogota: '2-3 días hábiles',
+  regional: '3-4 días hábiles',
+  nacional: '4-5 días hábiles',
 }
 
 export function getShippingZone(city: string): ShippingZone {
