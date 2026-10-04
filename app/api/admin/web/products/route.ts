@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
 
   let q = supabase
     .from('products_full')
-    .select('id, name, description, price, sale_price, on_sale, stock, stock_mode, stock_variants, available, out_of_stock, featured, free_shipping, colors, sizes, collections, collection_labels, garment_type, garment_type_label, material, printing_method, visual_tags, audience, images, created_at')
+    .select('id, name, description, price, sale_price, on_sale, stock, stock_mode, stock_variants, available, collection_active, out_of_stock, featured, free_shipping, colors, sizes, collections, collection_labels, garment_type, garment_type_label, material, printing_method, visual_tags, audience, images, created_at')
     .order('created_at', { ascending: false })
     .limit(limit)
 

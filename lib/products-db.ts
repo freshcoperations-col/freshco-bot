@@ -138,7 +138,9 @@ function normalize(row: Record<string, unknown>): Product {
     material: (row.material as string | null) ?? null,
     printing_method: (row.printing_method as string | null) ?? null,
     stock: Number(row.stock ?? 0),
-    available: row.available !== false,
+    // Visible solo si el admin no lo ocultó Y no está únicamente en colecciones
+    // desactivadas (collection_active viene de la vista products_full).
+    available: row.available !== false && row.collection_active !== false,
     out_of_stock: !!(row.out_of_stock),
     featured: !!row.featured,
     free_shipping: !!(row.free_shipping),
@@ -244,6 +246,10 @@ export async function getNewArrivals(limit = 5): Promise<Product[]> {
 
 // Devuelve los productos más comprados en órdenes aprobadas. Cuenta unidades
 // agregando los items de cada orden.
+// Por debajo de esto, "más vendido" no significa nada: con 1 venta cualquier
+// producto encabeza la lista. Se devuelve vacío y el bot recomienda otra cosa.
+const MIN_UNITS_FOR_BESTSELLER = 3
+
 export async function getBestsellers(limit = 5): Promise<Array<Product & { units_sold: number }>> {
   const supabase = createServerClient()
   const { data: orders, error } = await supabase
@@ -266,14 +272,18 @@ export async function getBestsellers(limit = 5): Promise<Array<Product & { units
     }
   }
 
-  const top = Object.entries(counts)
+  // Se ordena todo y se filtra DESPUÉS por visibilidad: si el primero está
+  // oculto (ej. un producto de prueba), el siguiente sube en vez de dejar la
+  // lista más corta.
+  const ranked = Object.entries(counts)
+    .filter(([, units]) => units >= MIN_UNITS_FOR_BESTSELLER)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, limit)
 
   const result: Array<Product & { units_sold: number }> = []
-  for (const [id, units] of top) {
+  for (const [id, units] of ranked) {
+    if (result.length >= limit) break
     const p = await getProductById(id)
-    if (p && p.available) {
+    if (p && p.available && !p.out_of_stock) {
       result.push({ ...p, units_sold: units })
     }
   }
