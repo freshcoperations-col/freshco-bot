@@ -23,6 +23,7 @@ import {
 } from './products-db'
 import { buildPaymentLink, newReference } from './wompi'
 import { applyOrderStock } from './inventory'
+import { notifyTeam, orderAlert } from './notify'
 import { sendWhatsAppImage } from './whatsapp'
 import { isValidIntent, type Intent } from './intents'
 
@@ -678,6 +679,13 @@ async function executeTool(
       // Pago manual — se asume que el cliente pagará.
       const inv = await applyOrderStock(supabase, { id: order.id, items: input.items as OrderItem[] })
       if (inv.errors.length) console.error('[inventory] create_order:', inv.errors)
+      await notifyTeam(orderAlert('cod', {
+        id: order.id,
+        customer_name: customerName ?? null,
+        total: input.total as number,
+        items: input.items as OrderItem[],
+        source: 'whatsapp_bot',
+      }))
 
       // Email de pedido recibido (fire-and-forget)
       if (customerEmail) {

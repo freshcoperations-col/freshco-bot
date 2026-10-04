@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { emailOrderCreated } from '@/lib/email'
 import { createServerClient } from '@/lib/supabase'
 import { applyOrderStock } from '@/lib/inventory'
+import { notifyTeam, orderAlert } from '@/lib/notify'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
       const supabase = createServerClient()
       const { data: order } = await supabase
         .from('orders')
-        .select('id, items, payment_status')
+        .select('id, items, payment_status, customer_name, total, source')
         .eq('id', body.order_id)
         .maybeSingle()
 
@@ -75,6 +76,13 @@ export async function POST(request: NextRequest) {
           items: order.items as never,
         })
         if (inv.errors.length) console.error('[inventory] orden web:', inv.errors)
+        await notifyTeam(orderAlert('cod', {
+          id: order.id as string,
+          customer_name: (order.customer_name as string | null) ?? null,
+          total: Number(order.total),
+          items: order.items as never,
+          source: (order.source as string | null) ?? 'webpage',
+        }))
       }
     } catch (e) {
       console.error('[inventory] orden web falló:', e)

@@ -10,6 +10,7 @@ import {
 } from '@/lib/whatsapp'
 import { processMessage, type InboundImage } from '@/lib/agent'
 import { STORE_INFO } from '@/lib/store-info'
+import { customerNameFor, notifyTeam } from '@/lib/notify'
 
 // GET — Verificación del webhook de WhatsApp (Meta)
 export async function GET(request: NextRequest) {
@@ -41,6 +42,27 @@ export async function POST(request: NextRequest) {
   waitUntil(processWebhook(body))
 
   return NextResponse.json({ status: 'ok' })
+}
+
+// Conversación nueva = es su primer mensaje, o el anterior fue hace más de
+// NEW_CONVERSATION_HOURS. Avisar cada mensaje sería ruido; esto avisa cuando
+// alguien llega o vuelve.
+const NEW_CONVERSATION_HOURS = 6
+
+async function isNewConversation(
+  supabase: ReturnType<typeof createServerClient>,
+  phone: string,
+): Promise<boolean> {
+  // El mensaje actual ya está guardado: el anterior es el segundo.
+  const { data } = await supabase
+    .from('messages')
+    .select('created_at')
+    .eq('customer_phone', phone)
+    .eq('direction', 'inbound')
+    .order('created_at', { ascending: false })
+    .limit(2)
+  if (!data || data.length < 2) return true
+  return Date.now() - new Date(data[1].created_at).getTime() > NEW_CONVERSATION_HOURS * 3600 * 1000
 }
 
 // Cliente que ya escribió antes pero lleva más de 24h sin actividad
@@ -157,6 +179,10 @@ async function processWebhook(body: unknown): Promise<void> {
             whatsapp_message_id: waMessageId,
           })
 
+          // ¿Empieza una conversación? (primer mensaje tras varias horas de
+          // silencio). Se calcula ahora y se avisa al final, después de responder.
+          const newConversation = await isNewConversation(supabase, phone)
+
           // 2. Marcar como leído + "Freshco está escribiendo..." mientras pensamos
           await markAsReadWithTyping(waMessageId)
 
@@ -169,6 +195,16 @@ async function processWebhook(body: unknown): Promise<void> {
           const paused = await isAIPaused(supabase, phone)
           if (paused) {
             console.log(`[wa] AI pausado para ${phone}, skip`)
+            // En modo manual el bot no responde: alguien del equipo tiene que
+            // hacerlo, así que cada mensaje avisa.
+            const name = await customerNameFor(supabase, phone)
+            await notifyTeam({
+              title: `✋ ${name ?? `+${phone}`} escribió (modo manual)`,
+              message: `📱 +${phone}\n💬 "${storedContent.slice(0, 200)}"\nEl bot está pausado: responde desde el admin.`,
+              tags: ['raised_hand'],
+              priority: 4,
+              path: '/conversations',
+            })
             continue
           }
 
@@ -242,48 +278,23 @@ async function processWebhook(body: unknown): Promise<void> {
           if (requestedHuman) {
             await setAIPaused(supabase, phone, true)
 
-            const ntfyTopic = process.env.NTFY_TOPIC?.trim()
-            console.log(`[ntfy] requestedHuman=true phone=${phone} ntfyTopic="${ntfyTopic ?? 'NO_CONFIGURADO'}"`)
-
-            if (!ntfyTopic) {
-              console.error('[ntfy] NTFY_TOPIC no está configurada en las variables de entorno — notificación no enviada')
-            } else {
-              const { data: orderData } = await supabase
-                .from('orders')
-                .select('customer_name')
-                .eq('customer_phone', phone)
-                .not('customer_name', 'is', null)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle()
-              const customerName = (orderData as { customer_name?: string } | null)?.customer_name
-
-              const nameLine = customerName ? `👤 ${customerName}\n` : ''
-              const ntfyBody =
-                `${nameLine}📱 +${phone}\n` +
-                `💬 "${text}"`
-              const ntfyTitle = customerName
-                ? `${customerName} necesita un asesor - Freshco`
-                : `Cliente +${phone} necesita un asesor - Freshco`
-
-              console.log(`[ntfy] enviando a topic="${ntfyTopic}" title="${ntfyTitle}"`)
-              try {
-                const ntfyRes = await fetch(`https://ntfy.sh/${ntfyTopic}`, {
-                  method: 'POST',
-                  headers: {
-                    'Title': ntfyTitle,
-                    'Priority': 'high',
-                    'Tags': 'bell,bust_in_silhouette',
-                    'Content-Type': 'text/plain; charset=utf-8',
-                  },
-                  body: ntfyBody,
-                })
-                const ntfyText = await ntfyRes.text()
-                console.log(`[ntfy] OK status=${ntfyRes.status} response="${ntfyText.slice(0, 80)}"`)
-              } catch (error) {
-                console.error('[ntfy] fetch falló:', error)
-              }
-            }
+            const name = await customerNameFor(supabase, phone)
+            await notifyTeam({
+              title: `🙋 ${name ?? `+${phone}`} necesita un asesor`,
+              message: `📱 +${phone}\n💬 "${text.slice(0, 200)}"`,
+              tags: ['bell'],
+              priority: 4,
+              path: '/conversations',
+            })
+          } else if (newConversation) {
+            // Conversación nueva (no aviso si pidió asesor: esa alerta ya llegó).
+            const name = await customerNameFor(supabase, phone)
+            await notifyTeam({
+              title: `💬 Nueva conversación: ${name ?? `+${phone}`}`,
+              message: `📱 +${phone}\n💬 "${storedContent.slice(0, 200)}"`,
+              tags: ['speech_balloon'],
+              path: '/conversations',
+            })
           }
         }
       }

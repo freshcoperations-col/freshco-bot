@@ -3,6 +3,7 @@ import { createServerClient, updateOrderByReference, logMessage, getOrderByRefer
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
 import { verifyEventChecksum, mapStatus, type WompiEventPayload } from '@/lib/wompi'
 import { applyOrderStock } from '@/lib/inventory'
+import { notifyTeam, orderAlert } from '@/lib/notify'
 import { emailPaymentConfirmed } from '@/lib/email'
 
 // Wompi POSTea eventos a esta URL. Configurar en el dashboard de Wompi:
@@ -89,6 +90,9 @@ async function processEvent(payload: WompiEventPayload): Promise<void> {
     const res = await applyOrderStock(supabase, order)
     console.log(`[inventory] orden=${order.id} aplicadas=${res.applied} repetidas=${res.skipped}`)
     if (res.errors.length) console.error('[inventory] errores:', res.errors)
+    // La guarda de idempotencia de arriba evita que un reintento de Wompi
+    // repita esta alerta.
+    await notifyTeam(orderAlert('paid', order))
   }
 
   let message: string | null = null
