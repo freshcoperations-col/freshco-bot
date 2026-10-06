@@ -7,8 +7,9 @@ export const dynamic = 'force-dynamic'
 // GET /api/size-guide/[type] — público, sin auth. Usado por la webpage.
 export async function GET(
   request: NextRequest,
-  { params }: { params: { type: string } },
+  props: { params: Promise<{ type: string }> },
 ) {
+  const params = await props.params
   const supabase = createServerClient()
   const { data } = await supabase
     .from('size_guide')

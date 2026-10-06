@@ -17,8 +17,9 @@ export async function OPTIONS(request: NextRequest) {
 // por WhatsApp y email, y decrementa el inventario global.
 export async function POST(
   request: NextRequest,
-  { params }: { params: { short_id: string } },
+  props: { params: Promise<{ short_id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.orders_edit) {

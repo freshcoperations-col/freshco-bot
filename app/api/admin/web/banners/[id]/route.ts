@@ -12,7 +12,8 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 // PUT /api/admin/web/banners/[id] — Body: { title?, link_url?, active? }
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.banners_edit) {
@@ -51,7 +52,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 }
 
 // DELETE /api/admin/web/banners/[id] — borra el banner y sus imágenes.
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.banners_edit) {

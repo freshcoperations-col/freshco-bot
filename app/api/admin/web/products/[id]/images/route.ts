@@ -31,8 +31,9 @@ export async function OPTIONS(request: NextRequest) {
 // Sube la imagen a Storage y la agrega al array images[] del producto.
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  props: { params: Promise<{ id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
@@ -116,8 +117,9 @@ export async function POST(
 // Cambia el color o el tipo de una foto ya subida, sin volver a subirla.
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  props: { params: Promise<{ id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.products_edit) {
@@ -160,8 +162,9 @@ export async function PATCH(
 // Body: { url: string }  — elimina la imagen del array por URL
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  props: { params: Promise<{ id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })

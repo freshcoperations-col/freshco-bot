@@ -27,8 +27,9 @@ export async function OPTIONS(request: NextRequest) {
 // Requiere que el bucket "productos" exista y sea público.
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  props: { params: Promise<{ id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.products_edit) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
@@ -79,8 +80,9 @@ export async function POST(
 // DELETE /api/admin/web/products/[id]/upload-image?color=Vainilla&side=frente
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  props: { params: Promise<{ id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.products_edit) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })

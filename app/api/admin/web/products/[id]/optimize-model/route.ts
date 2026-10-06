@@ -28,8 +28,9 @@ export async function OPTIONS(request: NextRequest) {
 // (Draco + texturas WebP) y lo vuelve a subir con el mismo nombre.
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  props: { params: Promise<{ id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.products_edit) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })

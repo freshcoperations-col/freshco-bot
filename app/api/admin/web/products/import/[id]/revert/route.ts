@@ -20,8 +20,9 @@ export async function OPTIONS(request: NextRequest) {
 // como conflicto para revisarlos.
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  props: { params: Promise<{ id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.products_edit) {

@@ -12,8 +12,9 @@ export async function OPTIONS(request: NextRequest) {
 // GET /api/admin/web/size-guide/[type]
 export async function GET(
   request: NextRequest,
-  { params }: { params: { type: string } },
+  props: { params: Promise<{ type: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
@@ -32,8 +33,9 @@ export async function GET(
 // Body: { sizes: string[], measurements: [{label, values}][] }
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { type: string } },
+  props: { params: Promise<{ type: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.sizes_edit) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
@@ -63,8 +65,9 @@ export async function PUT(
 // DELETE /api/admin/web/size-guide/[type]
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { type: string } },
+  props: { params: Promise<{ type: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.sizes_edit) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })

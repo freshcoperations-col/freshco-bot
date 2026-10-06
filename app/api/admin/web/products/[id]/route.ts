@@ -13,8 +13,9 @@ export async function OPTIONS(request: NextRequest) {
 // PUT /api/admin/web/products/[id] — actualización completa del producto.
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  props: { params: Promise<{ id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.products_edit) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
@@ -89,8 +90,9 @@ export async function PUT(
 // PATCH /api/admin/web/products/[id] — actualización parcial (tags y available).
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  props: { params: Promise<{ id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
@@ -123,8 +125,9 @@ export async function PATCH(
 // DELETE /api/admin/web/products/[id] — elimina el producto definitivamente.
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  props: { params: Promise<{ id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.products_delete) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })

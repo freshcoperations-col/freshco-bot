@@ -12,8 +12,9 @@ export async function OPTIONS(request: NextRequest) {
 // GET /api/admin/web/conversations/[phone]/messages — mensajes de una conversación.
 export async function GET(
   request: NextRequest,
-  { params }: { params: { phone: string } },
+  props: { params: Promise<{ phone: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.conversations_view) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })

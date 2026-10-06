@@ -9,7 +9,8 @@ export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, { status: 204, headers: adminCors(request.headers.get('origin')) })
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.coupons_edit) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
@@ -37,7 +38,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   return NextResponse.json({ coupon: data }, { headers: cors })
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.coupons_edit) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })

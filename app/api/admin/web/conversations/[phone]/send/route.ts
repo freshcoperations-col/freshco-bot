@@ -15,8 +15,9 @@ export async function OPTIONS(request: NextRequest) {
 // Envía un mensaje por WhatsApp desde el admin (fuera del bot IA) y lo registra.
 export async function POST(
   request: NextRequest,
-  { params }: { params: { phone: string } },
+  props: { params: Promise<{ phone: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.conversations_view) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })

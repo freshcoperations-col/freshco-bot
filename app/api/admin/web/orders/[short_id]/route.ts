@@ -13,8 +13,9 @@ export async function OPTIONS(request: NextRequest) {
 // Detalle completo de una orden + últimos N mensajes con ese cliente.
 export async function GET(
   request: NextRequest,
-  { params }: { params: { short_id: string } },
+  props: { params: Promise<{ short_id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.orders_view) {

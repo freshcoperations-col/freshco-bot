@@ -24,7 +24,8 @@ function pathFromUrl(url: string | null): string | null {
 // Sube la imagen de la tarjeta de la colección y reemplaza la anterior.
 // Al cambiar la foto el punto de enfoque vuelve al centro: el de la foto
 // anterior no significa nada en la nueva.
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.collections_edit) {
@@ -59,7 +60,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 }
 
 // DELETE /api/admin/web/collections/[id]/image — la tarjeta vuelve al diseño tipográfico.
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.collections_edit) {

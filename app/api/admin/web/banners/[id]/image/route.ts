@@ -17,7 +17,8 @@ function column(device: string | null): 'desktop_path' | 'mobile_path' | null {
 
 // POST /api/admin/web/banners/[id]/image — FormData { file, device: desktop|mobile }
 // Reemplaza la imagen de ese dispositivo y borra la anterior si la subió el admin.
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.banners_edit) {
@@ -56,7 +57,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 // DELETE /api/admin/web/banners/[id]/image?device=mobile — quita la imagen de
 // celular (la tienda vuelve a usar la de computador). La de computador no se
 // puede quitar: sin ella el banner no tiene qué mostrar.
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.banners_edit) {

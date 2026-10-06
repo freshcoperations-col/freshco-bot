@@ -15,8 +15,9 @@ export async function OPTIONS(request: NextRequest) {
 // Elimina definitivamente una orden. No se puede deshacer.
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { short_id: string } },
+  props: { params: Promise<{ short_id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.isOwner) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })

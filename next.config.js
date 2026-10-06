@@ -14,18 +14,16 @@ const nextConfig = {
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }]
   },
-  experimental: {
-    serverComponentsExternalPackages: [
-      'draco3dgltf',
-      'sharp',
-      '@gltf-transform/core',
-      '@gltf-transform/extensions',
-      '@gltf-transform/functions',
-      'meshoptimizer',
-    ],
-    outputFileTracingIncludes: {
-      '/api/admin/web/products/[id]/optimize-model': ['./node_modules/draco3dgltf/*.wasm'],
-    },
+  serverExternalPackages: [
+    'draco3dgltf',
+    'sharp',
+    '@gltf-transform/core',
+    '@gltf-transform/extensions',
+    '@gltf-transform/functions',
+    'meshoptimizer',
+  ],
+  outputFileTracingIncludes: {
+    '/api/admin/web/products/[id]/optimize-model': ['./node_modules/draco3dgltf/*.wasm'],
   },
 }
 

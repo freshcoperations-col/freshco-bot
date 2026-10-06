@@ -25,8 +25,9 @@ export async function OPTIONS(request: NextRequest) {
 // Supabase Storage sin pasar por Vercel (evita el límite de 4.5MB del body).
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  props: { params: Promise<{ id: string }> },
 ) {
+  const params = await props.params
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
   if (!admin.ok || !admin.permissions.products_edit) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
