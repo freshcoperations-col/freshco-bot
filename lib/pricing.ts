@@ -130,7 +130,8 @@ export async function quoteOrder(
 
   let coupon: ValidCoupon | null = null
   if (input.couponCode && input.couponCode.trim()) {
-    const check = await checkCoupon(supabase, input.couponCode, input.customer)
+    const units = items.reduce((n, i) => n + i.quantity, 0)
+    const check = await checkCoupon(supabase, input.couponCode, input.customer, { units })
     if (!check.ok) return fail(check.error)
     coupon = check.coupon
   }

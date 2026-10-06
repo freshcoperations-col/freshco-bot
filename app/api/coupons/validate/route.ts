@@ -70,5 +70,6 @@ export async function POST(request: NextRequest) {
     description: coupon.description,
     one_per_customer: coupon.one_per_customer,
     first_purchase_only: coupon.first_purchase_only,
+    min_items: coupon.min_items,
   }, { headers })
 }

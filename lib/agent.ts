@@ -578,6 +578,7 @@ async function executeTool(
         discount_pct: Math.round(check.coupon.discount * 100),
         description: check.coupon.description ?? '',
         first_purchase_only: check.coupon.first_purchase_only,
+        min_items: check.coupon.min_items,
         note: 'Para el descuento en pesos y el total, llama quote_order con este cupón.',
       })
     }

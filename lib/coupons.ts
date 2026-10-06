@@ -19,19 +19,23 @@ export interface ValidCoupon {
   description: string | null
   one_per_customer: boolean
   first_purchase_only: boolean
+  min_items: number | null
 }
 
 export async function checkCoupon(
   supabase: SupabaseClient,
   rawCode: string,
   customer: { email?: string | null; phone?: string | null },
+  // Unidades en el carrito. Sin este dato (validación pública del código) no
+  // se revisa el mínimo; el checkout y el bot siempre lo pasan.
+  cart?: { units: number },
 ): Promise<{ ok: true; coupon: ValidCoupon } | { ok: false; error: string }> {
   const code = rawCode.trim().toUpperCase()
   if (!code) return { ok: false, error: 'Código requerido' }
 
   const { data: c } = await supabase
     .from('coupons')
-    .select('id, code, discount, description, active, usage_limit, used_count, expires_at, one_per_customer, first_purchase_only')
+    .select('id, code, discount, description, active, usage_limit, used_count, expires_at, one_per_customer, first_purchase_only, min_items')
     .eq('active', true)
     .ilike('code', code)
     .maybeSingle()
@@ -49,6 +53,11 @@ export async function checkCoupon(
   const clean = (v?: string | null) => v?.trim().replace(/[,()]/g, '') || null
   const email = clean(customer.email)?.toLowerCase() ?? null
   const phone = clean(customer.phone)?.replace(/\D/g, '') || null
+
+  const minItems = c.min_items == null ? null : Number(c.min_items)
+  if (minItems && cart && cart.units < minItems) {
+    return { ok: false, error: `Este código aplica desde ${minItems} prendas (tienes ${cart.units}).` }
+  }
 
   if (c.first_purchase_only && (email || phone)) {
     const { data: bought } = await supabase.rpc('customer_has_purchases', { p_email: email, p_phone: phone })
@@ -81,6 +90,7 @@ export async function checkCoupon(
       description: (c.description as string | null) ?? null,
       one_per_customer: Boolean(c.one_per_customer),
       first_purchase_only: Boolean(c.first_purchase_only),
+      min_items: minItems,
     },
   }
 }
