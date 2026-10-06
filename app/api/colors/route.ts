@@ -1,10 +1,11 @@
-import { NextResponse } from 'next/server'
+import { storeCors } from '@/lib/store-cors'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
 // GET /api/colors — público, catálogo de colores con su hex para swatches.
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = createServerClient()
   const { data } = await supabase
     .from('colors')
@@ -14,6 +15,6 @@ export async function GET() {
 
   return NextResponse.json(
     { colors: data ?? [] },
-    { headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } },
+    { headers: storeCors(request.headers.get('origin')) },
   )
 }

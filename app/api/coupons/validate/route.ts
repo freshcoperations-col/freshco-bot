@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 import { checkCoupon } from '@/lib/coupons'
+import { allowRequest, clientIp } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,27 +28,37 @@ export async function OPTIONS(request: NextRequest) {
 
 // POST /api/coupons/validate
 // Body: { code: string }
-// Valida un cupón y, si es válido, incrementa used_count.
-// Endpoint público (sin auth) — la webpage lo llama directamente.
+// Pública (la tienda la llama al dar "Aplicar"). Solo dice si el CÓDIGO es
+// válido; NO consume el cupón.
+//
+// No recibe correo ni teléfono a propósito: con "primera compra" / "ya lo
+// usaste" serviría para averiguar si un correo ajeno ya compró. Las reglas
+// por cliente se revisan en el checkout, con el correo verificado de la sesión.
+//
+// Con freno: 10 intentos cada 10 minutos por IP, para que no se puedan
+// adivinar códigos en bucle.
 export async function POST(request: NextRequest) {
   const headers = cors(request.headers.get('origin'))
 
-  let body: { code?: string; customer_email?: string; customer_phone?: string }
+  let body: { code?: string }
   try { body = await request.json() } catch {
     return NextResponse.json({ valid: false, error: 'JSON inválido' }, { status: 400, headers })
   }
 
-  const code = body.code?.toString().trim().toUpperCase()
+  const code = body.code?.toString().trim().toUpperCase().slice(0, 40)
   if (!code) {
     return NextResponse.json({ valid: false, error: 'Código requerido' }, { status: 400, headers })
   }
 
-  const customerEmail = body.customer_email?.toString().trim().toLowerCase() || null
-  const customerPhone = body.customer_phone?.toString().trim() || null
-
   const supabase = createServerClient()
-  // Solo valida: NO consume el cupón (el uso se registra al crear el pedido).
-  const check = await checkCoupon(supabase, code, { email: customerEmail, phone: customerPhone })
+  if (!(await allowRequest(supabase, `coupon:${clientIp(request)}`, 10, 600))) {
+    return NextResponse.json(
+      { valid: false, error: 'Demasiados intentos. Espera unos minutos e intenta de nuevo.' },
+      { status: 429, headers },
+    )
+  }
+
+  const check = await checkCoupon(supabase, code, {})
   if (!check.ok) return NextResponse.json({ valid: false, error: check.error }, { headers })
   const coupon = check.coupon
 
@@ -55,8 +66,9 @@ export async function POST(request: NextRequest) {
     valid: true,
     code: coupon.code,
     discount: coupon.discount,
-    discount_pct: Math.round((coupon.discount as number) * 100),
+    discount_pct: Math.round(coupon.discount * 100),
     description: coupon.description,
     one_per_customer: coupon.one_per_customer,
+    first_purchase_only: coupon.first_purchase_only,
   }, { headers })
 }

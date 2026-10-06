@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { storeCors } from '@/lib/store-cors'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -7,7 +8,7 @@ export const dynamic = 'force-dynamic'
 // Retorna todas las combinaciones con garment_type, size, color y quantity.
 // quantity === 0 significa agotado para esa combinación.
 // garment_type vacío ('') aplica a todos los tipos de prenda (legacy).
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = createServerClient()
   const { data } = await supabase
     .from('global_inventory')
@@ -19,10 +20,7 @@ export async function GET() {
   return NextResponse.json(
     { inventory: (data ?? []) as Array<{ garment_type: string; size: string; color: string; quantity: number }> },
     {
-      headers: {
-        'Cache-Control': 'no-store',
-        'Access-Control-Allow-Origin': '*',
-      },
+      headers: storeCors(request.headers.get('origin')),
     },
   )
 }

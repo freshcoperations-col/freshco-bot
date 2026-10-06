@@ -48,6 +48,8 @@ export async function POST(request: NextRequest) {
     active: body.active !== false,
     usage_limit: body.usage_limit ? Number(body.usage_limit) : null,
     expires_at: body.expires_at ? String(body.expires_at) : null,
+    one_per_customer: Boolean(body.one_per_customer),
+    first_purchase_only: Boolean(body.first_purchase_only),
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: cors })

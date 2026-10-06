@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase'
 import { bearerToken } from '@/lib/admin-auth'
-import { checkCoupon, recordCouponUse, type ValidCoupon } from '@/lib/coupons'
-import { getShippingCost } from '@/lib/shipping'
+import { attachCouponUse, claimCoupon, releaseCoupon } from '@/lib/coupons'
+import { parseLines, quoteOrder } from '@/lib/pricing'
+import { allowRequest } from '@/lib/rate-limit'
 import { signIntegrity } from '@/lib/wompi'
 import { applyOrderStock } from '@/lib/inventory'
 import { emailOrderCreated } from '@/lib/email'
@@ -47,11 +48,6 @@ export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, { status: 204, headers: cors(request.headers.get('origin')) })
 }
 
-const MAX_LINES = 20
-const MAX_QTY = 10
-
-interface CartLine { product_id: string; size: string | null; color: string | null; quantity: number }
-
 function fail(error: string, status: number, headers: Record<string, string>) {
   return NextResponse.json({ error }, { status, headers })
 }
@@ -89,80 +85,35 @@ export async function POST(request: NextRequest) {
     return fail('Completa todos los datos de envío.', 400, headers)
   }
 
-  const rawItems = Array.isArray(body.items) ? body.items : []
-  if (rawItems.length === 0) return fail('Tu carrito está vacío.', 400, headers)
-  if (rawItems.length > MAX_LINES) return fail('Demasiados productos en un solo pedido.', 400, headers)
-  const lines: CartLine[] = rawItems.map((r) => {
-    const it = r as Record<string, unknown>
-    return {
-      product_id: String(it.product_id ?? ''),
-      size: it.size ? String(it.size) : null,
-      color: it.color ? String(it.color) : null,
-      quantity: Math.floor(Number(it.quantity)),
-    }
-  })
-  if (lines.some((l) => !l.product_id || !(l.quantity >= 1 && l.quantity <= MAX_QTY))) {
-    return fail('Hay un producto con una cantidad inválida.', 400, headers)
-  }
+  const parsed = parseLines(body.items)
+  if (!parsed.ok) return fail(parsed.error, 400, headers)
 
-  // ── 3. Precios y disponibilidad, desde la base ─────────────────────────
   const supabase = createServerClient()
-  const { data: products } = await supabase
-    .from('products_full')
-    .select('id, name, price, sale_price, on_sale, sizes, colors, available, collection_active, out_of_stock, free_shipping, stock_mode, stock_variants')
-    .in('id', Array.from(new Set(lines.map((l) => l.product_id))))
-  const byId = new Map((products ?? []).map((p) => [String(p.id), p as Record<string, unknown>]))
 
-  const items: Array<{ product_id: string; product_name: string; size: string; color: string; quantity: number; unit_price: number }> = []
-  let subtotal = 0
-  let freeShipping = false
-  for (const l of lines) {
-    const p = byId.get(l.product_id)
-    if (!p || p.available === false || p.collection_active === false) {
-      return fail('Un producto de tu carrito ya no está disponible. Revisa el carrito.', 409, headers)
-    }
-    if (p.out_of_stock) return fail(`"${p.name}" está agotado.`, 409, headers)
-
-    const sizes = (p.sizes as string[] | null) ?? []
-    const colors = (p.colors as string[] | null) ?? []
-    if (sizes.length && (!l.size || !sizes.includes(l.size))) return fail(`Elige una talla válida para "${p.name}".`, 400, headers)
-    if (colors.length && (!l.color || !colors.includes(l.color))) return fail(`Elige un color válido para "${p.name}".`, 400, headers)
-
-    // Stock por variante: no vender una combinación que no hay.
-    if (p.stock_mode === 'variantes') {
-      const v = ((p.stock_variants as Array<{ size: string | null; color: string | null; quantity: number }> | null) ?? [])
-        .find((x) => (x.size ?? null) === (l.size ?? null) && (x.color ?? null) === (l.color ?? null))
-      if (!v || v.quantity < l.quantity) {
-        return fail(`No hay suficientes unidades de "${p.name}" en ${[l.size, l.color].filter(Boolean).join(' / ')}.`, 409, headers)
-      }
-    }
-
-    const price = Number(p.price)
-    const sale = p.sale_price == null ? null : Number(p.sale_price)
-    const unit = p.on_sale && sale != null && sale < price ? sale : price
-    subtotal += unit * l.quantity
-    if (p.free_shipping) freeShipping = true
-    items.push({
-      product_id: l.product_id,
-      product_name: String(p.name),
-      size: l.size ?? 'N/A',
-      color: l.color ?? '',
-      quantity: l.quantity,
-      unit_price: unit,
-    })
+  // Freno: una cuenta no puede crear pedidos en ráfaga (ni probar cupones
+  // en bucle a través del checkout).
+  if (!(await allowRequest(supabase, `checkout:${email}`, 10, 600))) {
+    return fail('Demasiados intentos. Espera unos minutos e intenta de nuevo.', 429, headers)
   }
 
-  // ── 4. Cupón y envío ───────────────────────────────────────────────────
-  let coupon: ValidCoupon | null = null
-  if (body.coupon_code && String(body.coupon_code).trim()) {
-    const check = await checkCoupon(supabase, String(body.coupon_code), { email, phone })
-    if (!check.ok) return fail(check.error, 400, headers)
-    coupon = check.coupon
-  }
-  const discountAmount = coupon ? Math.round(subtotal * coupon.discount) : 0
-  const shippingCost = getShippingCost(city, freeShipping)
-  const total = Math.round(subtotal - discountAmount + shippingCost)
+  // ── 3. Precios, stock, cupón y envío: lib/pricing.ts ───────────────────
+  const quoted = await quoteOrder(supabase, {
+    lines: parsed.lines,
+    city,
+    couponCode: body.coupon_code ? String(body.coupon_code) : null,
+    customer: { email, phone },
+  })
+  if (!quoted.ok) return fail(quoted.error, quoted.status, headers)
+  const { items, total, shipping_cost: shippingCost, discount_amount: discountAmount, coupon } = quoted.quote
   const amountInCents = total * 100
+
+  // ── 4. Reservar el cupón (atómico: dos pedidos a la vez no lo gastan dos veces)
+  let couponUseId: string | null = null
+  if (coupon) {
+    const claim = await claimCoupon(supabase, coupon.code, { email, phone })
+    if (!claim.ok) return fail(claim.error, 400, headers)
+    couponUseId = claim.useId
+  }
 
   // ── 5. Crear el pedido ─────────────────────────────────────────────────
   const reference = method === 'wompi' ? `WEB-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` : null
@@ -190,11 +141,12 @@ export async function POST(request: NextRequest) {
     .select('id')
     .single()
   if (insErr || !order) {
+    if (couponUseId) await releaseCoupon(supabase, couponUseId)
     console.error('[checkout] no se pudo crear el pedido:', insErr)
     return fail('No se pudo crear el pedido. Intenta de nuevo.', 500, headers)
   }
 
-  if (coupon) await recordCouponUse(supabase, coupon, { email, phone, orderId: order.id })
+  if (couponUseId) await attachCouponUse(supabase, couponUseId, order.id)
 
   emailOrderCreated({
     shortId: order.id.slice(0, 8).toUpperCase(),

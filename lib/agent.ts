@@ -22,6 +22,8 @@ import {
   summarizeForAgent,
 } from './products-db'
 import { buildPaymentLink, newReference } from './wompi'
+import { parseLines, quoteOrder, type Quote } from './pricing'
+import { attachCouponUse, checkCoupon, claimCoupon, releaseCoupon } from './coupons'
 import { applyOrderStock } from './inventory'
 import { notifyTeam, orderAlert } from './notify'
 import { sendWhatsAppImage } from './whatsapp'
@@ -193,46 +195,72 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
-    name: 'create_payment_link',
+    name: 'quote_order',
     description:
-      'Genera un link de pago seguro con Wompi (tarjeta crédito/débito, PSE, Nequi, Bancolombia Transfer) para que el cliente pague desde el navegador. Crea la orden en estado pendiente y devuelve la URL para enviarla por WhatsApp. ÚSALO únicamente cuando el cliente ya confirmó: producto(s), talla, color, dirección de envío y eligió "link de pago" o "tarjeta" como método. La confirmación del pago llega automáticamente por webhook — no hace falta crear otra orden después.',
+      'Calcula el pedido con los precios REALES del sistema: precio de cada producto (con oferta si aplica), subtotal, descuento del cupón (verificando que este cliente pueda usarlo), envío según la ciudad y total. Úsalo SIEMPRE antes de mostrar el resumen al cliente y usa EXACTAMENTE los números que devuelve. Tú nunca calculas precios, descuentos ni envíos.',
     input_schema: {
       type: 'object',
       properties: {
         items: {
           type: 'array',
-          description: 'Productos del pedido.',
+          description: 'Productos del pedido: SOLO qué se compra. El precio lo pone el sistema.',
           items: {
             type: 'object',
             properties: {
-              product_id: { type: 'string' },
-              product_name: { type: 'string' },
+              product_id: { type: 'string', description: 'id del producto (de search_products / get_product_by_id).' },
               size: { type: 'string' },
               color: { type: 'string' },
-              quantity: { type: 'number' },
-              unit_price: { type: 'number', description: 'Precio unitario en COP.' },
+              quantity: { type: 'integer', description: 'Entero de 1 a 10.' },
             },
-            required: ['product_id', 'product_name', 'size', 'color', 'quantity', 'unit_price'],
+            required: ['product_id', 'quantity'],
           },
         },
-        total: { type: 'number', description: 'Total en pesos colombianos (COP), envío incluido.' },
+        city: { type: 'string', description: 'Ciudad o municipio de entrega (ej: "Bogotá", "Chía", "Medellín").' },
+        coupon_code: { type: 'string', description: 'Código de cupón, solo si el cliente dio uno.' },
+        customer_email: { type: 'string', description: 'Correo del cliente, si ya lo tienes (sirve para verificar cupones de primera compra).' },
+      },
+      required: ['items', 'city'],
+    },
+  },
+  {
+    name: 'create_payment_link',
+    description:
+      'Genera un link de pago seguro con Wompi (tarjeta crédito/débito, PSE, Nequi, Bancolombia, Daviplata) y crea la orden en estado pendiente. ÚSALO únicamente cuando el cliente ya confirmó el resumen de quote_order. El sistema recalcula el total: el monto del link es el que devuelve esta herramienta. La confirmación del pago llega automáticamente por webhook.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          description: 'Productos del pedido: SOLO qué se compra. El precio lo pone el sistema.',
+          items: {
+            type: 'object',
+            properties: {
+              product_id: { type: 'string', description: 'id del producto (de search_products / get_product_by_id).' },
+              size: { type: 'string' },
+              color: { type: 'string' },
+              quantity: { type: 'integer', description: 'Entero de 1 a 10.' },
+            },
+            required: ['product_id', 'quantity'],
+          },
+        },
+        city: { type: 'string', description: 'Ciudad o municipio de entrega.' },
         shipping_address: { type: 'string', description: 'Dirección física de entrega: ciudad, barrio, calle/carrera, número e indicaciones. NO incluir el nombre del cliente.' },
         customer_name: { type: 'string', description: 'Nombre completo del cliente.' },
-        customer_email: { type: 'string', description: 'Correo electrónico del cliente. OBLIGATORIO — necesario para asociar el pedido a su cuenta.' },
-        coupon_code: { type: 'string', description: 'Código de cupón aplicado. Solo si el cliente lo proporcionó y validate_coupon confirmó que es válido.' },
-        discount_amount: { type: 'number', description: 'Monto descontado en COP. Ya debe estar descontado del total.' },
+        customer_email: { type: 'string', description: 'Correo electrónico del cliente. OBLIGATORIO.' },
+        coupon_code: { type: 'string', description: 'Código de cupón, solo si quote_order lo aceptó.' },
       },
-      required: ['items', 'total', 'shipping_address', 'customer_name', 'customer_email'],
+      required: ['items', 'city', 'shipping_address', 'customer_name', 'customer_email'],
     },
   },
   {
     name: 'validate_coupon',
     description:
-      'Verifica si un código de cupón es válido y cuánto descuento aplica. NO incrementa el contador de usos — solo consulta. Llámalo cuando el cliente mencione tener un cupón o código de descuento.',
+      'Verifica si un código de cupón existe y está activo, y si ESTE cliente puede usarlo (uno por cliente, solo primera compra). NO consume el cupón. Llámalo cuando el cliente mencione un cupón. Para el descuento en pesos usa quote_order.',
     input_schema: {
       type: 'object',
       properties: {
         code: { type: 'string', description: 'El código del cupón tal como lo escribió el cliente.' },
+        customer_email: { type: 'string', description: 'Correo del cliente, si ya lo tienes.' },
       },
       required: ['code'],
     },
@@ -240,37 +268,54 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: 'create_order',
     description:
-      'Crea un pedido SIN link de pago — úsalo ÚNICAMENTE para contraentrega. Todos los demás pagos (tarjeta, PSE, Nequi, Bancolombia, Daviplata) van por create_payment_link: no aceptamos transferencias directas.',
+      'Crea un pedido CONTRAENTREGA (sin link de pago). Úsalo ÚNICAMENTE si el cliente eligió contraentrega y confirmó el resumen de quote_order. Todos los demás pagos van por create_payment_link. El sistema recalcula el total.',
     input_schema: {
       type: 'object',
       properties: {
         items: {
           type: 'array',
+          description: 'Productos del pedido: SOLO qué se compra. El precio lo pone el sistema.',
           items: {
             type: 'object',
             properties: {
-              product_id: { type: 'string' },
-              product_name: { type: 'string' },
+              product_id: { type: 'string', description: 'id del producto (de search_products / get_product_by_id).' },
               size: { type: 'string' },
               color: { type: 'string' },
-              quantity: { type: 'number' },
-              unit_price: { type: 'number' },
+              quantity: { type: 'integer', description: 'Entero de 1 a 10.' },
             },
-            required: ['product_id', 'product_name', 'size', 'color', 'quantity', 'unit_price'],
+            required: ['product_id', 'quantity'],
           },
         },
-        total: { type: 'number' },
-        shipping_address: { type: 'string' },
-        payment_method: { type: 'string', description: 'Siempre "Contraentrega".' },
+        city: { type: 'string', description: 'Ciudad o municipio de entrega.' },
+        shipping_address: { type: 'string', description: 'Dirección física de entrega, sin el nombre del cliente.' },
         customer_name: { type: 'string' },
         customer_email: { type: 'string', description: 'Correo electrónico del cliente.' },
-        coupon_code: { type: 'string', description: 'Código de cupón aplicado (si aplica).' },
-        discount_amount: { type: 'number', description: 'Monto descontado en COP (si aplica).' },
+        coupon_code: { type: 'string', description: 'Código de cupón, solo si quote_order lo aceptó.' },
       },
-      required: ['items', 'total', 'shipping_address', 'payment_method'],
+      required: ['items', 'city', 'shipping_address', 'customer_name'],
     },
   },
 ]
+
+// La cotización tal como la ve la IA: los números exactos para el resumen.
+function quoteForAgent(q: Quote) {
+  return {
+    items: q.items.map((i) => ({
+      product_id: i.product_id,
+      name: i.product_name,
+      size: i.size,
+      color: i.color,
+      quantity: i.quantity,
+      unit_price: i.unit_price,
+      line_total: i.unit_price * i.quantity,
+    })),
+    subtotal: q.subtotal,
+    coupon: q.coupon ? { code: q.coupon.code, discount_pct: Math.round(q.coupon.discount * 100) } : null,
+    discount_amount: q.discount_amount,
+    shipping_cost: q.shipping_cost,
+    total: q.total,
+  }
+}
 
 // ─── Ejecución de herramientas ─────────────────────────────────────────────────
 
@@ -493,216 +538,131 @@ async function executeTool(
       })
     }
 
+    case 'quote_order': {
+      const supabase = createServerClient()
+      const parsed = parseLines(input.items)
+      if (!parsed.ok) return JSON.stringify({ error: parsed.error })
+      const quoted = await quoteOrder(supabase, {
+        lines: parsed.lines,
+        city: String(input.city ?? ''),
+        couponCode: input.coupon_code ? String(input.coupon_code) : null,
+        customer: { email: input.customer_email ? String(input.customer_email) : null, phone: customerPhone },
+      })
+      if (!quoted.ok) return JSON.stringify({ error: quoted.error })
+      return JSON.stringify(quoteForAgent(quoted.quote))
+    }
+
     case 'validate_coupon': {
       const supabase = createServerClient()
-      const code = String(input.code ?? '').trim().toUpperCase()
-      if (!code) return JSON.stringify({ valid: false, error: 'Código vacío.' })
-
-      const { data: coupon } = await supabase
-        .from('coupons')
-        .select('id, code, discount, description, active, usage_limit, used_count, expires_at, one_per_customer')
-        .ilike('code', code)
-        .maybeSingle()
-
-      if (!coupon) return JSON.stringify({ valid: false, error: 'Código no encontrado.' })
-      if (!coupon.active) return JSON.stringify({ valid: false, error: 'Este código ya no está activo.' })
-      if (coupon.expires_at && new Date(coupon.expires_at as string) < new Date()) {
-        return JSON.stringify({ valid: false, error: 'Este código ya expiró.' })
-      }
-      if (coupon.usage_limit != null && (coupon.used_count as number) >= (coupon.usage_limit as number)) {
-        return JSON.stringify({ valid: false, error: 'Este código ya alcanzó su límite de usos.' })
-      }
-
-      // Verificar one_per_customer por teléfono del cliente de WhatsApp
-      if (coupon.one_per_customer) {
-        const { data: existing } = await supabase
-          .from('coupon_uses')
-          .select('id')
-          .eq('coupon_id', coupon.id)
-          .eq('customer_phone', customerPhone)
-          .limit(1)
-          .maybeSingle()
-        if (existing) {
-          return JSON.stringify({ valid: false, error: 'Este código es solo para tu primera compra y ya lo usaste anteriormente.' })
-        }
-      }
-
+      const check = await checkCoupon(supabase, String(input.code ?? ''), {
+        email: input.customer_email ? String(input.customer_email) : null,
+        phone: customerPhone,
+      })
+      if (!check.ok) return JSON.stringify({ valid: false, error: check.error })
       return JSON.stringify({
         valid: true,
-        coupon_id: coupon.id,
-        code: coupon.code,
-        discount_pct: Math.round((coupon.discount as number) * 100),
-        discount_decimal: coupon.discount,
-        description: coupon.description ?? '',
+        code: check.coupon.code,
+        discount_pct: Math.round(check.coupon.discount * 100),
+        description: check.coupon.description ?? '',
+        first_purchase_only: check.coupon.first_purchase_only,
+        note: 'Para el descuento en pesos y el total, llama quote_order con este cupón.',
       })
     }
 
-    case 'create_payment_link': {
-      try {
-        const items = input.items as OrderItem[]
-        const total = Number(input.total)
-        const shippingAddress = String(input.shipping_address)
-        const customerName = String(input.customer_name)
-        const customerEmail = input.customer_email ? String(input.customer_email) : undefined
-        const couponCode = input.coupon_code ? String(input.coupon_code).toUpperCase() : undefined
-        const discountAmount = input.discount_amount ? Number(input.discount_amount) : 0
-        const reference = newReference(customerPhone)
-        const amountInCents = Math.round(total * 100)
-
-        const paymentLink = buildPaymentLink({
-          reference,
-          amountInCents,
-          currency: 'COP',
-          customerEmail,
-          customerName,
-          customerPhone,
-        })
-
-        const supabase = createServerClient()
-        const order = await saveOrder(supabase, {
-          customer_phone: customerPhone,
-          items,
-          total,
-          shipping_address: shippingAddress,
-          payment_method: 'Wompi (link de pago)',
-          customer_name: customerName,
-          customer_email: customerEmail,
-          wompi_reference: reference,
-          payment_link_url: paymentLink,
-          amount_in_cents: amountInCents,
-          currency: 'COP',
-          source: 'whatsapp_bot',
-          coupon_code: couponCode,
-          discount_amount: discountAmount,
-        })
-
-        // Registrar uso del cupón en coupon_uses (garantiza one_per_customer)
-        if (couponCode && order) {
-          const { data: c } = await supabase
-            .from('coupons')
-            .select('id, used_count')
-            .ilike('code', couponCode)
-            .maybeSingle()
-          if (c) {
-            await Promise.all([
-              supabase.from('coupons').update({ used_count: (c.used_count as number) + 1 }).eq('id', c.id),
-              supabase.from('coupon_uses').insert({
-                coupon_id: c.id,
-                customer_phone: customerPhone,
-                customer_email: customerEmail ?? null,
-                order_id: order.id,
-              }),
-            ])
-          }
-        }
-
-        if (!order) {
-          return JSON.stringify({ error: 'No se pudo guardar la orden. Intenta de nuevo.' })
-        }
-
-        // Email de pedido recibido (fire-and-forget)
-        if (customerEmail) {
-          emailOrderCreated({
-            shortId: order.id.slice(0, 8).toUpperCase(),
-            customerName,
-            customerEmail,
-            total,
-            items,
-            shippingAddress: shippingAddress,
-          }).catch((e) => console.error('Email pedido recibido:', e))
-        }
-
-        return JSON.stringify({
-          success: true,
-          order_id: order.id,
-          reference,
-          payment_link: paymentLink,
-          message:
-            `Link de pago generado. Comparte el siguiente texto con el cliente: "Listo. Tu pedido por $${total.toLocaleString('es-CO')} está reservado. Paga aquí: ${paymentLink}  Cuando se complete el pago te confirmamos por este chat."`,
-        })
-      } catch (error) {
-        console.error('Error generando link de pago:', error)
-        const msg = error instanceof Error ? error.message : 'Error desconocido.'
-        return JSON.stringify({
-          error: `No se pudo generar el link de pago: ${msg}`,
-        })
-      }
-    }
-
+    case 'create_payment_link':
     case 'create_order': {
+      const isCod = name === 'create_order'
       const supabase = createServerClient()
-      const customerName = input.customer_name ? String(input.customer_name) : undefined
-      const customerEmail = input.customer_email ? String(input.customer_email) : undefined
-      const couponCode = input.coupon_code ? String(input.coupon_code).toUpperCase() : undefined
-      const discountAmount = input.discount_amount ? Number(input.discount_amount) : 0
-      const paymentMethod = input.payment_method as string
-      const isCod = paymentMethod.toLowerCase().includes('contraentrega')
-      const shippingAddress = input.shipping_address as string
-      // Extraer ciudad de la dirección para calcular envío
-      const cityMatch = shippingAddress.split(',')[0]?.trim() ?? shippingAddress
-      const shippingCostValue = getShippingCost(cityMatch, false)
+      const customerName = String(input.customer_name ?? '').trim()
+      const customerEmail = input.customer_email ? String(input.customer_email).trim().toLowerCase() : undefined
+      const shippingAddress = String(input.shipping_address ?? '').trim()
+      if (!isCod && !customerEmail) return JSON.stringify({ error: 'Falta el correo del cliente: es obligatorio para el link de pago.' })
+      if (!customerName || !shippingAddress) return JSON.stringify({ error: 'Faltan el nombre o la dirección del cliente.' })
+
+      // Precios, cupón y envío los calcula el sistema (lib/pricing.ts), no la IA.
+      const parsed = parseLines(input.items)
+      if (!parsed.ok) return JSON.stringify({ error: parsed.error })
+      const quoted = await quoteOrder(supabase, {
+        lines: parsed.lines,
+        city: String(input.city ?? ''),
+        couponCode: input.coupon_code ? String(input.coupon_code) : null,
+        customer: { email: customerEmail ?? null, phone: customerPhone },
+      })
+      if (!quoted.ok) return JSON.stringify({ error: quoted.error })
+      const q = quoted.quote
+
+      // Reserva atómica del cupón (uno por cliente / primera compra).
+      let couponUseId: string | null = null
+      if (q.coupon) {
+        const claim = await claimCoupon(supabase, q.coupon.code, { email: customerEmail ?? null, phone: customerPhone })
+        if (!claim.ok) return JSON.stringify({ error: claim.error })
+        couponUseId = claim.useId
+      }
+
+      const reference = isCod ? undefined : newReference(customerPhone)
+      const amountInCents = q.total * 100
+      const paymentLink = isCod
+        ? undefined
+        : buildPaymentLink({ reference: reference!, amountInCents, currency: 'COP', customerEmail, customerName, customerPhone })
+
       const order = await saveOrder(supabase, {
         customer_phone: customerPhone,
-        items: input.items as OrderItem[],
-        total: input.total as number,
+        items: q.items,
+        total: q.total,
         shipping_address: shippingAddress,
-        payment_method: paymentMethod,
+        shipping_cost: q.shipping_cost,
+        payment_method: isCod ? 'Contraentrega' : 'Wompi (link de pago)',
+        payment_status: isCod ? 'cod' : 'pending',
         customer_name: customerName,
         customer_email: customerEmail,
+        wompi_reference: reference,
+        payment_link_url: paymentLink,
+        amount_in_cents: amountInCents,
+        currency: 'COP',
         source: 'whatsapp_bot',
-        coupon_code: couponCode,
-        discount_amount: discountAmount,
-        payment_status: isCod ? 'cod' : 'pending',
-        shipping_cost: shippingCostValue,
+        coupon_code: q.coupon?.code,
+        discount_amount: q.discount_amount,
       })
-
-      // Incrementar used_count si se usó cupón
-      if (couponCode && order) {
-        const { data: c } = await supabase
-          .from('coupons')
-          .select('id, used_count')
-          .ilike('code', couponCode)
-          .maybeSingle()
-        if (c) {
-          await supabase
-            .from('coupons')
-            .update({ used_count: (c.used_count as number) + 1 })
-            .eq('id', c.id)
-        }
-      }
-
       if (!order) {
+        if (couponUseId) await releaseCoupon(supabase, couponUseId)
         return JSON.stringify({ error: 'No se pudo guardar el pedido. Intenta de nuevo.' })
       }
+      if (couponUseId) await attachCouponUse(supabase, couponUseId, order.id)
 
-      // Inventario: mismo punto único que el webhook de Wompi (lib/inventory.ts).
-      // Pago manual — se asume que el cliente pagará.
-      const inv = await applyOrderStock(supabase, { id: order.id, items: input.items as OrderItem[] })
-      if (inv.errors.length) console.error('[inventory] create_order:', inv.errors)
-      await notifyTeam(orderAlert('cod', {
-        id: order.id,
-        customer_name: customerName ?? null,
-        total: input.total as number,
-        items: input.items as OrderItem[],
-        source: 'whatsapp_bot',
-      }))
-
-      // Email de pedido recibido (fire-and-forget)
       if (customerEmail) {
         emailOrderCreated({
           shortId: order.id.slice(0, 8).toUpperCase(),
           customerName,
           customerEmail,
-          total: input.total as number,
-          items: input.items as never,
-          shippingAddress: input.shipping_address as string,
+          total: q.total,
+          items: q.items,
+          shippingAddress,
         }).catch((e) => console.error('Email pedido recibido:', e))
       }
 
+      const summary = quoteForAgent(q)
+      if (isCod) {
+        // Contraentrega: se descuenta stock y se avisa al equipo ya. Con link
+        // de pago eso pasa cuando el webhook de Wompi confirma.
+        const inv = await applyOrderStock(supabase, { id: order.id, items: q.items })
+        if (inv.errors.length) console.error('[inventory] create_order:', inv.errors)
+        await notifyTeam(orderAlert('cod', { id: order.id, customer_name: customerName, total: q.total, items: q.items, source: 'whatsapp_bot' }))
+        return JSON.stringify({
+          success: true,
+          order_id: order.id,
+          short_id: order.id.slice(0, 8).toUpperCase(),
+          ...summary,
+          message: `Pedido #${order.id.slice(0, 8).toUpperCase()} creado. Total a pagar al recibir: $${q.total.toLocaleString('es-CO')}. Usa ESTE total con el cliente.`,
+        })
+      }
       return JSON.stringify({
         success: true,
         order_id: order.id,
-        message: `Pedido #${order.id.slice(0, 8).toUpperCase()} creado exitosamente.`,
+        reference,
+        payment_link: paymentLink,
+        ...summary,
+        message:
+          `Link de pago generado por $${q.total.toLocaleString('es-CO')} (ese es el total real: si es distinto al que le dijiste al cliente, corrígelo). Comparte con el cliente: "Listo. Tu pedido por $${q.total.toLocaleString('es-CO')} está reservado. Paga aquí: ${paymentLink}  Cuando se complete el pago te confirmamos por este chat."`,
       })
     }
 

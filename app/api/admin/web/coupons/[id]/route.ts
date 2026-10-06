@@ -28,6 +28,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (body.expires_at !== undefined) patch.expires_at = body.expires_at ? String(body.expires_at) : null
   if (body.used_count !== undefined) patch.used_count = Number(body.used_count)
   if (body.one_per_customer !== undefined) patch.one_per_customer = Boolean(body.one_per_customer)
+  if (body.first_purchase_only !== undefined) patch.first_purchase_only = Boolean(body.first_purchase_only)
 
   const supabase = createServerClient()
   const { data, error } = await supabase.from('coupons').update(patch).eq('id', params.id).select().single()
