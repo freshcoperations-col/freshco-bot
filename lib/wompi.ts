@@ -10,7 +10,7 @@
 //   - Eventos:       https://docs.wompi.co/docs/colombia/eventos/
 //   - Integridad:    https://docs.wompi.co/docs/colombia/widget-checkout-web/#firma-de-integridad
 
-import { createHash } from 'crypto'
+import { createHash, timingSafeEqual } from 'crypto'
 
 const WOMPI_CHECKOUT_BASE = 'https://checkout.wompi.co/p/'
 
@@ -153,7 +153,11 @@ export function verifyEventChecksum(payload: WompiEventPayload): boolean {
     .update(`${concat}${payload.timestamp}${eventsSecret}`)
     .digest('hex')
 
-  return computed === sig.checksum.toLowerCase()
+  // Comparación en tiempo constante: no filtra por cuánto tarda cuántos
+  // caracteres coinciden.
+  const given = Buffer.from(sig.checksum.toLowerCase())
+  const expected = Buffer.from(computed)
+  return given.length === expected.length && timingSafeEqual(given, expected)
 }
 
 // Mapea estados de Wompi a los que guardamos en orders.payment_status.

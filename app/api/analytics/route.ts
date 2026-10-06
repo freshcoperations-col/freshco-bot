@@ -13,7 +13,7 @@ export async function OPTIONS(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
-  if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+  if (!admin.ok || !admin.permissions.analytics_view) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
 
   const supabase = createServerClient()
 

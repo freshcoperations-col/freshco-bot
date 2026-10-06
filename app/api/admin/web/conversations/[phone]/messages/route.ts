@@ -16,7 +16,7 @@ export async function GET(
 ) {
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
-  if (!admin.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
+  if (!admin.ok || !admin.permissions.conversations_view) return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: cors })
 
   const supabase = createServerClient()
   const { data, error } = await supabase

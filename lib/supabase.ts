@@ -204,7 +204,9 @@ export async function saveOrder(
 ): Promise<Order | null> {
   const { data: order, error } = await supabase
     .from('orders')
-    .insert({ source: 'whatsapp_bot', ...data })
+    // status 'pendiente', igual que la web y el admin (el default de la
+    // columna es 'pending' y quedaban los dos valores mezclados).
+    .insert({ source: 'whatsapp_bot', status: 'pendiente', ...data })
     .select()
     .single()
 

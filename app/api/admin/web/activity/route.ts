@@ -40,12 +40,15 @@ export async function GET(request: NextRequest) {
       .limit(10),
   ])
 
+  // Cada quien ve solo lo de las secciones a las que tiene permiso.
+  const seeOrders = admin.permissions.orders_view
+  const seeChats = admin.permissions.conversations_view
   return NextResponse.json(
     {
       now: new Date().toISOString(),
-      new_orders: orders.count ?? 0,
-      orders: orders.data ?? [],
-      asesor_requests: asesor.data ?? [],
+      new_orders: seeOrders ? orders.count ?? 0 : 0,
+      orders: seeOrders ? orders.data ?? [] : [],
+      asesor_requests: seeChats ? asesor.data ?? [] : [],
     },
     { headers: { ...cors, 'Cache-Control': 'no-store' } },
   )

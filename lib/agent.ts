@@ -24,7 +24,7 @@ import {
 } from './products-db'
 import { buildPaymentLink, newReference } from './wompi'
 import { parseLines, quoteOrder, type Quote } from './pricing'
-import { attachCouponUse, checkCoupon, claimCoupon, releaseCoupon } from './coupons'
+import { attachCouponUse, checkCoupon, claimCoupon, releaseCoupon, releaseCouponsForOrder } from './coupons'
 import { applyOrderStock } from './inventory'
 import { notifyTeam, orderAlert, teamNumbers } from './notify'
 import { sendWhatsAppImage } from './whatsapp'
@@ -438,9 +438,38 @@ async function executeTool(
         if (itemIndex < 0 || itemIndex >= items.length) {
           return JSON.stringify({ error: `El item ${itemIndex} no existe en el pedido.` })
         }
-        items[itemIndex] = { ...items[itemIndex], [changeType]: newValue }
+        // El valor nuevo tiene que existir en el producto (y tener stock si
+        // se maneja por variante). Se guarda con el nombre canónico.
+        const current = items[itemIndex]
+        const product = await getProductById(current.product_id)
+        if (!product) return JSON.stringify({ error: 'No encontré ese producto para cambiarlo.' })
+        const options = changeType === 'size' ? product.sizes : product.colors
+        const canonical = options.find((o) => o.toLowerCase() === newValue.trim().toLowerCase())
+        if (!canonical) {
+          return JSON.stringify({ error: `"${newValue}" no existe para ${product.name}. Opciones: ${options.join(', ')}.` })
+        }
+        const next = { ...current, [changeType]: canonical }
+        const parsed = parseLines([{ product_id: next.product_id, size: next.size, color: next.color, quantity: next.quantity }])
+        const check = parsed.ok
+          ? await quoteOrder(supabase, { lines: parsed.lines, city: 'Bogotá', customer: {}, allowTest: isTeam })
+          : null
+        if (!check || !check.ok) {
+          return JSON.stringify({ error: check && !check.ok ? check.error : 'Combinación no disponible.' })
+        }
+        items[itemIndex] = next
         updatedItems = items
         patch.items = items
+        // Si este pedido ya descontó stock (pagado o contraentrega), se
+        // devuelve el de la variante vieja y se descuenta el de la nueva.
+        // Límite conocido: volver a una variante que ya se vendió y se devolvió
+        // en este mismo pedido no la descuenta de nuevo (el libro ya tiene ese
+        // renglón de venta). Es raro; si pasa, se ajusta a mano en el admin.
+        if (['approved', 'cod'].includes(order.payment_status)) {
+          const rev = await applyOrderStock(supabase, { id: order.id, items: order.items }, 'revert')
+          const app = await applyOrderStock(supabase, { id: order.id, items })
+          const errs = [...rev.errors, ...app.errors]
+          if (errs.length) console.error('[inventory] modify_order:', errs)
+        }
       } else if (changeType === 'address') {
         if (!newValue) return JSON.stringify({ error: 'Falta new_value (dirección).' })
         patch.shipping_address = newValue
@@ -464,6 +493,7 @@ async function executeTool(
           const rev = await applyOrderStock(supabase, { id: order.id, items: order.items }, 'revert')
           if (rev.errors.length) console.error('[inventory] cancelación:', rev.errors)
         }
+        await releaseCouponsForOrder(supabase, order.id)
       } else {
         return JSON.stringify({ error: `change_type inválido: ${changeType}` })
       }

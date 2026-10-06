@@ -292,3 +292,35 @@ export async function sendWhatsAppRaw(
     return { ok: false, error: String(err) }
   }
 }
+
+// Código de verificación (OTP). Dentro de la ventana de 24 h va como texto.
+// Fuera de ella WhatsApp exige una plantilla de categoría AUTENTICACIÓN
+// (WHATSAPP_OTP_TEMPLATE, por defecto "codigo_verificacion"), que Meta arma
+// con su texto fijo y un botón "Copiar código". Nunca cae en la plantilla de
+// pedidos: esa no lleva el código.
+export async function sendOtpWhatsApp(
+  to: string,
+  code: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const text = await sendWhatsAppRaw({
+    to,
+    type: 'text',
+    text: { body: `🔐 Tu código de Freshco es: *${code}*\n\nVence en 10 minutos. Si no lo pediste, ignora este mensaje.` },
+  })
+  if (text.ok) return text
+  if (text.code !== 131047) return { ok: false, error: text.error }
+
+  const tpl = await sendWhatsAppRaw({
+    to,
+    type: 'template',
+    template: {
+      name: process.env.WHATSAPP_OTP_TEMPLATE ?? 'codigo_verificacion',
+      language: { code: 'es' },
+      components: [
+        { type: 'body', parameters: [{ type: 'text', text: code }] },
+        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] },
+      ],
+    },
+  })
+  return tpl.ok ? tpl : { ok: false, error: tpl.error }
+}

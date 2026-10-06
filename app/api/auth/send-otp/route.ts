@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomInt } from 'crypto'
 import { createServerClient } from '@/lib/supabase'
-import { sendWhatsAppMessage } from '@/lib/whatsapp'
+import { sendOtpWhatsApp } from '@/lib/whatsapp'
+import { customerEmailFromRequest } from '@/lib/customer-auth'
+import { allowRequest, clientIp } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +19,7 @@ function corsHeaders(origin: string | null): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Cache-Control': 'no-store, max-age=0',
   }
 }
@@ -56,7 +58,24 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // Solo con sesión iniciada: el código sirve para vincular los pedidos de ese
+  // teléfono a TU cuenta. Sin esto, cualquiera podría usar el bot para mandar
+  // WhatsApp a miles de números.
+  const email = await customerEmailFromRequest(request.headers.get('authorization'))
+  if (!email) {
+    return NextResponse.json({ error: 'Inicia sesión para continuar.' }, { status: 401, headers })
+  }
+
   const supabase = createServerClient()
+
+  // Freno por cuenta y por IP (además del freno por teléfono de abajo).
+  const [byUser, byIp] = await Promise.all([
+    allowRequest(supabase, `otp-send:${email}`, 5, 3600),
+    allowRequest(supabase, `otp-send-ip:${clientIp(request)}`, 10, 3600),
+  ])
+  if (!byUser || !byIp) {
+    return NextResponse.json({ error: 'Has pedido demasiados códigos. Intenta en una hora.' }, { status: 429, headers })
+  }
 
   // Rate limit: máximo un OTP por minuto y 5 por hora para el mismo phone.
   const oneMinuteAgo = new Date(Date.now() - 60_000).toISOString()
@@ -91,7 +110,7 @@ export async function POST(request: NextRequest) {
   const { error: insertErr } = await supabase.from('auth_otps').insert({
     phone,
     code,
-    email: body.email ?? null,
+    email,
     expires_at: expiresAt,
   })
 
@@ -100,14 +119,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Error interno' }, { status: 500, headers })
   }
 
-  const message =
-    `🔐 Tu código de Freshco es: *${code}*\n\n` +
-    `Vence en 10 minutos. Si no lo pediste, ignora este mensaje.`
-
-  try {
-    await sendWhatsAppMessage(phone, message)
-  } catch (err) {
-    console.error('No se pudo enviar OTP por WhatsApp:', err)
+  const sent = await sendOtpWhatsApp(phone, code)
+  if (!sent.ok) {
+    console.error('No se pudo enviar OTP por WhatsApp:', sent.error)
     return NextResponse.json(
       { error: 'No pudimos enviar el código por WhatsApp. Verifica el número.' },
       { status: 502, headers },

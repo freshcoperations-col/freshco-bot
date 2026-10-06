@@ -18,8 +18,8 @@ export async function POST(
 ) {
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
-  if (!admin.ok) {
-    return NextResponse.json({ error: 'Forbidden', reason: admin.reason }, { status: 403, headers: cors })
+  if (!admin.ok || !admin.permissions.orders_edit) {
+    return NextResponse.json({ error: 'Forbidden', reason: admin.ok ? 'sin_permiso' : admin.reason }, { status: 403, headers: cors })
   }
 
   const shortId = params.short_id?.toLowerCase().replace(/^#/, '').trim()

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { applyOrderStock } from '@/lib/inventory'
+import { releaseCouponsForOrder } from '@/lib/coupons'
 import { createServerClient } from '@/lib/supabase'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
 import { emailOrderCancelled } from '@/lib/email'
@@ -20,8 +22,8 @@ export async function POST(
 ) {
   const cors = adminCors(request.headers.get('origin'))
   const admin = await verifyAdmin(bearerToken(request.headers.get('authorization')))
-  if (!admin.ok) {
-    return NextResponse.json({ error: 'Forbidden', reason: admin.reason }, { status: 403, headers: cors })
+  if (!admin.ok || !admin.permissions.orders_edit) {
+    return NextResponse.json({ error: 'Forbidden', reason: admin.ok ? 'sin_permiso' : admin.reason }, { status: 403, headers: cors })
   }
 
   const shortId = params.short_id?.toLowerCase().replace(/^#/, '').trim()
@@ -64,6 +66,13 @@ export async function POST(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500, headers: cors })
   }
+
+  // Devolver el stock (el libro sabe si este pedido lo había descontado: uno
+  // que nunca descontó, como un link sin pagar, no infla el inventario) y
+  // liberar el cupón para que el cliente pueda volver a usarlo.
+  const rev = await applyOrderStock(supabase, { id: order.id as string, items: order.items as never }, 'revert')
+  if (rev.errors.length) console.error('[inventory] cancelación admin:', rev.errors)
+  await releaseCouponsForOrder(supabase, order.id as string)
 
   // Notificar al cliente por WhatsApp si se pide.
   if (notify) {

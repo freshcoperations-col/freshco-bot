@@ -107,11 +107,23 @@ function formatCOP(n: number): string {
   return '$' + Math.round(n).toLocaleString('es-CO')
 }
 
+// Todo lo que viene del cliente (nombre, dirección, productos, guía…) se
+// escapa: si no, alguien podría meter HTML (un enlace o botón falso) en un
+// correo oficial de Freshco dando su "dirección" por el bot.
+function esc(v: unknown): string {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function itemsHtml(items: Array<{ product_name?: string; size?: string; color?: string; quantity?: number; unit_price?: number }>): string {
   const rows = (items ?? []).map((it) => {
-    const name = it.product_name ?? 'Producto'
-    const detail = [it.size ? `Talla ${it.size}` : '', it.color ?? ''].filter(Boolean).join(' · ')
-    const qty = it.quantity ?? 1
+    const name = esc(it.product_name ?? 'Producto')
+    const detail = esc([it.size ? `Talla ${it.size}` : '', it.color ?? ''].filter(Boolean).join(' · '))
+    const qty = Number(it.quantity ?? 1)
     const price = (it.unit_price ?? 0) * qty
     return `<div class="item"><span class="item-name">${qty}× ${name}${detail ? `<br/><small style="color:#999">${detail}</small>` : ''}</span><span class="item-price">${formatCOP(price)}</span></div>`
   })
@@ -134,7 +146,7 @@ interface OrderEmailData {
 
 // 1. Pedido recibido
 export async function emailOrderCreated(data: OrderEmailData): Promise<void> {
-  const firstName = data.customerName?.split(' ')[0] ?? 'cliente'
+  const firstName = esc(data.customerName?.split(' ')[0] ?? 'cliente')
   const html = layout(`
     <div class="badge badge-yellow">📋 Pedido recibido</div>
     <h2>¡Hola ${firstName}, recibimos tu pedido!</h2>
@@ -144,7 +156,7 @@ export async function emailOrderCreated(data: OrderEmailData): Promise<void> {
       ${itemsHtml(data.items)}
       <div class="total-row"><span>Total</span><span>${formatCOP(data.total)}</span></div>
     </div>
-    ${data.shippingAddress ? `<table class="details"><tr><td>Envío a</td><td>${data.shippingAddress}</td></tr></table>` : ''}
+    ${data.shippingAddress ? `<table class="details"><tr><td>Envío a</td><td>${esc(data.shippingAddress)}</td></tr></table>` : ''}
     <p style="color:#888;font-size:13px">¿Tienes dudas? Escríbenos por WhatsApp y te ayudamos.</p>
     <a href="${STORE_URL}" class="btn">Ver tienda</a>
   `)
@@ -153,7 +165,7 @@ export async function emailOrderCreated(data: OrderEmailData): Promise<void> {
 
 // 2. Pago confirmado
 export async function emailPaymentConfirmed(data: OrderEmailData): Promise<void> {
-  const firstName = data.customerName?.split(' ')[0] ?? 'cliente'
+  const firstName = esc(data.customerName?.split(' ')[0] ?? 'cliente')
   const html = layout(`
     <div class="badge badge-green">✅ Pago confirmado</div>
     <h2>¡${firstName}, tu pago fue aprobado!</h2>
@@ -163,7 +175,7 @@ export async function emailPaymentConfirmed(data: OrderEmailData): Promise<void>
       ${itemsHtml(data.items)}
       <div class="total-row"><span>Total pagado</span><span>${formatCOP(data.total)}</span></div>
     </div>
-    ${data.shippingAddress ? `<table class="details"><tr><td>Envío a</td><td>${data.shippingAddress}</td></tr></table>` : ''}
+    ${data.shippingAddress ? `<table class="details"><tr><td>Envío a</td><td>${esc(data.shippingAddress)}</td></tr></table>` : ''}
     <p style="color:#888;font-size:13px">Te avisaremos cuando tu pedido salga a domicilio.</p>
     <a href="${STORE_URL}" class="btn">Seguir comprando</a>
   `)
@@ -172,14 +184,14 @@ export async function emailPaymentConfirmed(data: OrderEmailData): Promise<void>
 
 // 3. Pedido enviado
 export async function emailOrderShipped(data: OrderEmailData): Promise<void> {
-  const firstName = data.customerName?.split(' ')[0] ?? 'cliente'
+  const firstName = esc(data.customerName?.split(' ')[0] ?? 'cliente')
   const carrierSlug = (data.shippingCarrier ?? '').toLowerCase().trim().replace(/\s+/g, '-')
   const trackingUrls: Record<string, string> = {
-    servientrega: `https://www.servientrega.com/wps/portal/rastreo-envio?guia=${data.trackingNumber}`,
-    coordinadora: `https://coordinadora.com/rastrea-tu-envio/?guia=${data.trackingNumber}`,
-    'inter-rapidisimo': `https://www.interrapidisimo.com/sigue-tu-envio/?guia=${data.trackingNumber}`,
-    envia: `https://envia.co/rastrear-envio/?guia=${data.trackingNumber}`,
-    '99minutos': `https://99minutos.com/tracking?n=${data.trackingNumber}`,
+    servientrega: `https://www.servientrega.com/wps/portal/rastreo-envio?guia=${encodeURIComponent(String(data.trackingNumber ?? ''))}`,
+    coordinadora: `https://coordinadora.com/rastrea-tu-envio/?guia=${encodeURIComponent(String(data.trackingNumber ?? ''))}`,
+    'inter-rapidisimo': `https://www.interrapidisimo.com/sigue-tu-envio/?guia=${encodeURIComponent(String(data.trackingNumber ?? ''))}`,
+    envia: `https://envia.co/rastrear-envio/?guia=${encodeURIComponent(String(data.trackingNumber ?? ''))}`,
+    '99minutos': `https://99minutos.com/tracking?n=${encodeURIComponent(String(data.trackingNumber ?? ''))}`,
   }
   const trackingUrl = trackingUrls[carrierSlug]
 
@@ -188,11 +200,11 @@ export async function emailOrderShipped(data: OrderEmailData): Promise<void> {
     <h2>¡${firstName}, tu pedido ya salió!</h2>
     <p>Tu pedido <strong>#${data.shortId}</strong> está en camino y llega en 2-3 días hábiles.</p>
     <div class="tracking-box">
-      <div class="carrier">${data.shippingCarrier ?? 'Transportadora'}</div>
-      <div class="guia">${data.trackingNumber}</div>
+      <div class="carrier">${esc(data.shippingCarrier ?? 'Transportadora')}</div>
+      <div class="guia">${esc(data.trackingNumber)}</div>
       ${trackingUrl ? `<a href="${trackingUrl}" style="display:inline-block;margin-top:12px;color:#1e40af;font-size:13px;font-weight:600">Rastrear envío →</a>` : ''}
     </div>
-    ${data.shippingAddress ? `<table class="details"><tr><td>Destino</td><td>${data.shippingAddress}</td></tr></table>` : ''}
+    ${data.shippingAddress ? `<table class="details"><tr><td>Destino</td><td>${esc(data.shippingAddress)}</td></tr></table>` : ''}
     ${trackingUrl ? `<a href="${trackingUrl}" class="btn">Rastrear mi pedido</a>` : ''}
   `)
   await sendBoth(data.customerEmail, `Pedido #${data.shortId} — salió a domicilio`, `Tu pedido #${data.shortId} está en camino 📦 — Freshco`, html)
@@ -200,7 +212,7 @@ export async function emailOrderShipped(data: OrderEmailData): Promise<void> {
 
 // 4. Pedido entregado
 export async function emailOrderDelivered(data: OrderEmailData): Promise<void> {
-  const firstName = data.customerName?.split(' ')[0] ?? 'cliente'
+  const firstName = esc(data.customerName?.split(' ')[0] ?? 'cliente')
   const html = layout(`
     <div class="badge badge-green">🎉 Entregado</div>
     <h2>¡${firstName}, tu pedido llegó!</h2>
@@ -209,7 +221,7 @@ export async function emailOrderDelivered(data: OrderEmailData): Promise<void> {
     <table class="details">
       <tr><td>Pedido</td><td>#${data.shortId}</td></tr>
       <tr><td>Total</td><td>${formatCOP(data.total)}</td></tr>
-      ${data.shippingCarrier ? `<tr><td>Entregado por</td><td>${data.shippingCarrier}</td></tr>` : ''}
+      ${data.shippingCarrier ? `<tr><td>Entregado por</td><td>${esc(data.shippingCarrier)}</td></tr>` : ''}
     </table>
     <a href="${STORE_URL}" class="btn">Ver nuevos productos</a>
   `)
@@ -218,9 +230,9 @@ export async function emailOrderDelivered(data: OrderEmailData): Promise<void> {
 
 // 5. Pedido cancelado
 export async function emailOrderCancelled(data: OrderEmailData): Promise<void> {
-  const firstName = data.customerName?.split(' ')[0] ?? 'cliente'
+  const firstName = esc(data.customerName?.split(' ')[0] ?? 'cliente')
   const reasonBlock = data.reason
-    ? `<table class="details"><tr><td>Motivo</td><td>${data.reason}</td></tr></table>`
+    ? `<table class="details"><tr><td>Motivo</td><td>${esc(data.reason)}</td></tr></table>`
     : ''
   const html = layout(`
     <div class="badge badge-red">❌ Cancelado</div>

@@ -123,3 +123,15 @@ export async function releaseCoupon(supabase: SupabaseClient, useId: string): Pr
   const { error } = await supabase.rpc('release_coupon', { p_use_id: useId })
   if (error) console.error('[cupón] no se pudo liberar el uso:', error)
 }
+
+// Al cancelar o borrar un pedido, su cupón vuelve a estar disponible para ese
+// cliente (y used_count se recalcula a partir de los usos reales).
+export async function releaseCouponsForOrder(supabase: SupabaseClient, orderId: string): Promise<void> {
+  const { data: uses } = await supabase.from('coupon_uses').select('id, coupon_id').eq('order_id', orderId)
+  if (!uses?.length) return
+  await supabase.from('coupon_uses').delete().eq('order_id', orderId)
+  for (const couponId of Array.from(new Set(uses.map((u) => u.coupon_id as string)))) {
+    const { count } = await supabase.from('coupon_uses').select('id', { count: 'exact', head: true }).eq('coupon_id', couponId)
+    await supabase.from('coupons').update({ used_count: count ?? 0 }).eq('id', couponId)
+  }
+}

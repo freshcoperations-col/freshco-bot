@@ -55,6 +55,29 @@ async function processEvent(payload: WompiEventPayload): Promise<void> {
     return
   }
 
+  // Un pedido aprobado no baja de estado. Si el cliente reintentó el pago con
+  // el mismo link, Wompi puede entregar el rechazo del primer intento DESPUÉS
+  // del pago aprobado: ese evento viejo no puede marcar como fallido un pedido
+  // pagado. La única salida de "aprobado" es una anulación (reembolso).
+  if (previo?.payment_status === 'approved' && paymentStatus !== 'approved') {
+    if (paymentStatus !== 'voided') {
+      console.warn(`[wompi] ${tx.reference}: evento ${tx.status} después de aprobado, se ignora`)
+      return
+    }
+    await updateOrderByReference(supabase, tx.reference, { payment_status: 'voided', status: 'anulado' } as never)
+    const rev = await applyOrderStock(supabase, { id: previo.id, items: previo.items }, 'revert')
+    if (rev.errors.length) console.error('[inventory] anulación:', rev.errors)
+    await notifyTeam({
+      title: '↩️ Pago anulado en Wompi',
+      message: `Pedido #${previo.id.slice(0, 8).toUpperCase()} (${cop(Number(previo.total))}): Wompi anuló el pago. Se devolvió el stock; no lo despaches.`,
+      tags: ['warning'],
+      priority: 5,
+      path: '/orders',
+      template: orderTemplate(previo as never, 'pago anulado, no despachar'),
+    })
+    return
+  }
+
   // El monto pagado tiene que ser el del pedido. Si no coincide, alguien pagó
   // un monto distinto al que se firmó o al que vale el pedido: no se aprueba,
   // y el equipo revisa a mano.

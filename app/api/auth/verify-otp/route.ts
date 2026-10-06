@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
+import { customerEmailFromRequest } from '@/lib/customer-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,7 @@ function corsHeaders(origin: string | null): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Cache-Control': 'no-store, max-age=0',
   }
 }
@@ -49,11 +50,15 @@ export async function POST(request: NextRequest) {
 
   const phone = body.phone ? normalizePhone(body.phone) : null
   const code = body.code?.toString().trim()
-  const email = body.email?.toString().trim().toLowerCase()
+  // El correo sale de la sesión (verificado), nunca del cuerpo de la petición.
+  const email = await customerEmailFromRequest(request.headers.get('authorization'))
+  if (!email) {
+    return NextResponse.json({ error: 'Inicia sesión para continuar.' }, { status: 401, headers })
+  }
 
   if (!phone || !code || !email) {
     return NextResponse.json(
-      { error: 'phone, code y email son requeridos' },
+      { error: 'phone y code son requeridos' },
       { status: 400, headers },
     )
   }
@@ -103,14 +108,17 @@ export async function POST(request: NextRequest) {
     .select('id')
     .eq('customer_phone', phone)
 
-  // Backfill del email solo en las que no lo tenían bien.
-  const { data: updated, error: updateErr } = await supabase
-    .from('orders')
-    .update({ customer_email: email })
-    .eq('customer_phone', phone)
-    .or(`customer_email.is.null,customer_email.neq.${email}`)
-    .select('id')
-
+  // Vincula a esta cuenta los pedidos de ese teléfono que no la tenían. Se
+  // filtra en código y se actualiza por id: el correo no va dentro de un
+  // filtro de PostgREST.
+  const toLink = (allOrders ?? []).length
+    ? ((await supabase.from('orders').select('id, customer_email').eq('customer_phone', phone)).data ?? [])
+        .filter((o) => (o.customer_email ?? '').toLowerCase() !== email)
+        .map((o) => o.id as string)
+    : []
+  const { data: updated, error: updateErr } = toLink.length
+    ? await supabase.from('orders').update({ customer_email: email }).in('id', toLink).select('id')
+    : { data: [] as Array<{ id: string }>, error: null }
   if (updateErr) {
     console.error('Error backfilling email:', updateErr)
     return NextResponse.json({ error: 'Error actualizando órdenes' }, { status: 500, headers })
