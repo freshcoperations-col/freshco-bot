@@ -70,6 +70,9 @@ export async function POST(request: NextRequest) {
       status: 'pendiente',
       source: 'admin_manual',
       notes: body.notes ?? null,
+      // Pedido tomado a mano por el equipo: la autorización de datos la
+      // gestiona quien lo crea (no hay casilla en línea que marcar).
+      privacy_consent_channel: 'admin',
     })
     .select('id')
     .single()

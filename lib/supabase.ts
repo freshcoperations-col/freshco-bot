@@ -200,6 +200,9 @@ export async function saveOrder(
     discount_amount?: number
     payment_status?: 'pending' | 'cod'
     shipping_cost?: number
+    privacy_consent_at?: string
+    privacy_consent_channel?: 'web' | 'whatsapp' | 'admin'
+    privacy_policy_version?: string
   },
 ): Promise<Order | null> {
   const { data: order, error } = await supabase

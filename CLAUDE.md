@@ -36,6 +36,11 @@ No tiene interfaz propia: `app/page.tsx` es solo una página de estado.
 - **Cupones** (`lib/coupons.ts`): validar no consume el cupón. El uso se registra al crear el pedido.
 - Rutas `/api/admin/web/*`: siempre `verifyAdmin` (el token de Supabase, más `ADMIN_EMAILS` para los dueños o `admin_users` con su rol).
 
+## Protección de datos (Ley 1581)
+- Política en `freshco-webpage/src/data/legal.js` (slug `privacidad`). Si cambia el texto, sube `PRIVACY_POLICY_VERSION` en la web Y en `lib/store-info.ts`.
+- Cada pedido guarda la prueba de autorización: `privacy_consent_at`, `privacy_consent_channel` (web / whatsapp / admin), `privacy_policy_version`. El checkout web la exige (casilla); el bot comparte el link al pedir datos.
+- Si se agrega un proveedor nuevo que reciba datos de clientes, hay que listarlo en la política.
+
 ## Mapa de `lib/`
 - `agent.ts`, `system-prompt.ts`: agente de IA (tools + prompt con datos vivos de la tienda)
 - `products-db.ts`, `product-fields.ts`, `product-catalog.ts`: catálogo
@@ -45,7 +50,7 @@ No tiene interfaz propia: `app/page.tsx` es solo una página de estado.
 - `rate-limit.ts`: freno de intentos en Postgres (`rate_limit_hit`).
 - `shipping.ts`, `wompi.ts`, `email.ts`
 - `notify.ts`: alertas al equipo por WhatsApp (`TEAM_WHATSAPP_NUMBERS`; fuera de la ventana de 24 h usa las plantillas `pedido_equipo` y `conversacion_equipo`) y, si existe `NTFY_TOPIC`, también por ntfy
-- `store-info.ts`: datos de la tienda + horario de asesores (`humanAvailability`)
+- `store-info.ts`: datos de la tienda, horario de asesores (`humanAvailability`) y la política de datos (`PRIVACY_POLICY_URL`, `PRIVACY_POLICY_VERSION`, igual a la de `freshco-webpage/src/data/legal.js`)
 - `admin-auth.ts`, `admin-cors.ts`, `permissions.ts`: acceso al admin
 - `storage-images.ts`: URLs de imágenes en Supabase Storage
 

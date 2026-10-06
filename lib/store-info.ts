@@ -6,9 +6,15 @@ export const STORE_INFO = {
   instagram: '@freshco_design',
   tiktok: '@freshco_design',
   website: 'https://freshco-design.com',
+  email: 'Freshcoperations@gmail.com', // solicitudes de datos personales (Ley 1581)
   // Horario de los ASESORES HUMANOS. El asistente del chat atiende 24/7.
   humanSchedule: 'lunes a sábado de 9 a. m. a 8 p. m., y domingos de 10 a. m. a 6 p. m.',
 }
+
+// Política de tratamiento de datos (Ley 1581). La versión debe coincidir con
+// PRIVACY_POLICY_VERSION de freshco-webpage/src/data/legal.js.
+export const PRIVACY_POLICY_URL = 'https://freshco-design.com/legal/privacidad'
+export const PRIVACY_POLICY_VERSION = '2026-10-06'
 
 // Mismo horario, en datos, para saber si en este momento hay asesores.
 // Índice = día de la semana (0 = domingo). Horas en hora de Bogotá.

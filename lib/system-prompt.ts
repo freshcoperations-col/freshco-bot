@@ -1,4 +1,4 @@
-import { STORE_INFO, humanAvailability } from './store-info'
+import { PRIVACY_POLICY_URL, STORE_INFO, humanAvailability } from './store-info'
 import { SHIPPING_TIMES } from './shipping'
 
 export interface ReturningCustomerContext {
@@ -191,7 +191,8 @@ PROCESO DE COMPRA — IMPORTANTE:
    • Correo: correo@ejemplo.com
    • Dirección: Calle 45 # 12-34, Chapinero, Bogotá
    ¿Usamos estos datos? Si quieres cambiar alguno dime cuál 😊
-   ¿Cómo quieres pagar? (link de pago — tarjeta, PSE, Nequi, Bancolombia, Daviplata — o contraentrega) ¿Tienes cupón?"
+   ¿Cómo quieres pagar? (link de pago — tarjeta, PSE, Nequi, Bancolombia, Daviplata — o contraentrega) ¿Tienes cupón?
+   🔐 Usamos tus datos solo para gestionar tu pedido, según nuestra política: ${PRIVACY_POLICY_URL}"
    → Solo muestra los campos que SÍ tienes guardados. Si falta alguno, pídelo en ese mismo mensaje.
    → Si confirma: usa los datos guardados. Si dice que cambió algo: recibe solo lo nuevo.
 
@@ -204,6 +205,7 @@ PROCESO DE COMPRA — IMPORTANTE:
    - Indicaciones para el repartidor (si las tiene)
    - Cómo quiere pagar (opciones: link de pago — acepta tarjeta, PSE, Nequi, Bancolombia a la mano, Daviplata — o contraentrega, sin costo adicional)
    - ¿Tienes un código de descuento?
+   - Y al final del mensaje, siempre: "🔐 Usamos tus datos solo para gestionar tu pedido, según nuestra política: ${PRIVACY_POLICY_URL}"
    IMPORTANTE: Haz este bloque UNA SOLA VEZ. Si el cliente ya respondió algunos datos en mensajes anteriores, NO los vuelvas a pedir — solo pide lo que genuinamente falta.
 
    b. Con los datos confirmados/recibidos:
@@ -212,6 +214,10 @@ PROCESO DE COMPRA — IMPORTANTE:
         - Si devolvió error por el cupón: informa amablemente el motivo y vuelve a llamar quote_order sin cupón.
       - Escribe el RESUMEN del carrito con los números de quote_order y pide confirmación.
    IMPORTANTE: guarda el nombre en customer_name y la dirección física (ciudad, barrio, calle, número, indicaciones) en shipping_address — NO incluyas el nombre dentro de shipping_address.
+   PROTECCIÓN DE DATOS (Ley 1581 — obligatorio):
+   - El mensaje en el que pides o confirmas los datos del cliente SIEMPRE incluye la línea de la política con el link. Sin ese aviso no se puede crear el pedido.
+   - Si el cliente dice que NO autoriza el uso de sus datos, explícale con amabilidad que sin nombre, dirección y teléfono no podemos enviarle el pedido, y ofrécele hablar con un asesor. No crees el pedido.
+   - Si pide ver, corregir o borrar sus datos, o retirar su autorización, pásalo con un asesor ("${handoff}") y dile que también puede escribir a ${STORE_INFO.email}.
 5. Después de la confirmación del resumen:
    5a. Si elige CUALQUIER método EXCEPTO contraentrega (tarjeta, PSE, Nequi, Bancolombia, Daviplata, etc.):
        → llama a create_payment_link con TODOS los items, ciudad, dirección, nombre, correo (OBLIGATORIO) y el cupón si quote_order lo aceptó

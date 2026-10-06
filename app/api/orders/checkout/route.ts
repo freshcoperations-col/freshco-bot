@@ -71,8 +71,15 @@ export async function POST(request: NextRequest) {
     customer?: { name?: string; phone?: string; address?: string; city?: string }
     payment_method?: string
     coupon_code?: string | null
+    privacy_consent?: boolean
+    privacy_policy_version?: string
   }
   try { body = await request.json() } catch { return fail('Pedido inválido.', 400, headers) }
+
+  // Ley 1581: sin autorización de tratamiento de datos no se crea el pedido.
+  if (body.privacy_consent !== true) {
+    return fail('Para comprar necesitamos tu autorización para el tratamiento de tus datos.', 400, headers)
+  }
 
   const method = body.payment_method === 'cod' ? 'cod' : body.payment_method === 'wompi' ? 'wompi' : null
   if (!method) return fail('Elige una forma de pago.', 400, headers)
@@ -139,6 +146,9 @@ export async function POST(request: NextRequest) {
       status: 'pendiente',
       coupon_code: coupon?.code ?? null,
       discount_amount: discountAmount,
+      privacy_consent_at: new Date().toISOString(),
+      privacy_consent_channel: 'web',
+      privacy_policy_version: String(body.privacy_policy_version ?? '').slice(0, 20) || null,
     })
     .select('id')
     .single()

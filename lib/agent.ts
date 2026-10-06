@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { emailOrderCreated } from './email'
 import { buildSystemPrompt } from './system-prompt'
 import { SIZE_GUIDE, SHIPPING_INFO, DTF_CARE } from './product-catalog'
-import { PAYMENT_METHODS, STORE_INFO } from './store-info'
+import { PAYMENT_METHODS, PRIVACY_POLICY_VERSION, STORE_INFO } from './store-info'
 import { getShippingCost, getShippingZone, SHIPPING_COSTS, SHIPPING_TIMES } from './shipping'
 import {
   createServerClient,
@@ -667,6 +667,11 @@ async function executeTool(
         source: 'whatsapp_bot',
         coupon_code: q.coupon?.code,
         discount_amount: q.discount_amount,
+        // Autorización Ley 1581: el cliente dio sus datos después de que el
+        // bot le compartió la política (ver PROCESO DE COMPRA en el prompt).
+        privacy_consent_at: new Date().toISOString(),
+        privacy_consent_channel: 'whatsapp',
+        privacy_policy_version: PRIVACY_POLICY_VERSION,
       })
       if (!order) {
         if (couponUseId) await releaseCoupon(supabase, couponUseId)
