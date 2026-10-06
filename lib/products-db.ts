@@ -36,6 +36,10 @@ export interface Product {
   printing_method: string | null
   stock: number
   available: boolean
+  is_test: boolean
+  // Visible si no fuera de prueba. Para el equipo: los productos de prueba
+  // se pueden buscar y comprar por el bot (para probar pagos).
+  visible_to_team: boolean
   out_of_stock: boolean
   featured: boolean
   free_shipping: boolean
@@ -68,6 +72,7 @@ export interface ProductFilters {
   color?: string
   on_sale?: boolean
   only_available?: boolean
+  include_test?: boolean   // solo para números del equipo
   limit?: number
 }
 
@@ -142,6 +147,8 @@ function normalize(row: Record<string, unknown>): Product {
     // desactivadas (collection_active viene de la vista products_full) y no es
     // un producto de prueba (esos solo se compran desde su link en la web).
     available: row.available !== false && row.collection_active !== false && !row.is_test,
+    is_test: !!row.is_test,
+    visible_to_team: row.available !== false && row.collection_active !== false,
     out_of_stock: !!(row.out_of_stock),
     featured: !!row.featured,
     free_shipping: !!(row.free_shipping),
@@ -196,7 +203,7 @@ export async function searchProducts(filters: ProductFilters = {}): Promise<Prod
   let all = await fetchAll()
 
   if (filters.only_available !== false) {
-    all = all.filter((p) => p.available && !p.out_of_stock)
+    all = all.filter((p) => (p.available || (filters.include_test && p.visible_to_team)) && !p.out_of_stock)
   }
   if (filters.garment_type) {
     all = all.filter((p) => p.garment_type === filters.garment_type)
@@ -306,34 +313,52 @@ export async function getProductById(id: string): Promise<Product | null> {
   return data ? normalize(data) : null
 }
 
+// Colecciones y tipos de prenda QUE TIENEN PRODUCTOS A LA VENTA. Las tablas
+// tienen tipos activos sin productos todavía (hoodies, pantalones…): si el bot
+// los listara, ofrecería cosas que no existen. Se deduce del catálogo, así que
+// en cuanto se publique el primer producto de un tipo, el bot lo ofrece solo.
+async function sellableSets(): Promise<{ collections: Set<string>; garmentTypes: Set<string> }> {
+  const products = (await fetchAll()).filter((p) => p.available && !p.out_of_stock)
+  return {
+    collections: new Set(products.flatMap((p) => p.collections)),
+    garmentTypes: new Set(products.map((p) => p.garment_type)),
+  }
+}
+
 export async function getCollections(): Promise<Collection[]> {
   const supabase = createServerClient()
-  const { data, error } = await supabase
-    .from('collections')
-    .select('id, label, description, sort_order')
-    .eq('active', true)
-    .order('sort_order', { ascending: true })
+  const [{ data, error }, sellable] = await Promise.all([
+    supabase
+      .from('collections')
+      .select('id, label, description, sort_order')
+      .eq('active', true)
+      .order('sort_order', { ascending: true }),
+    sellableSets(),
+  ])
 
   if (error) {
     console.error('Supabase error fetching collections:', error)
     return []
   }
-  return (data ?? []) as Collection[]
+  return ((data ?? []) as Collection[]).filter((c) => sellable.collections.has(c.id))
 }
 
 export async function getGarmentTypes(): Promise<GarmentType[]> {
   const supabase = createServerClient()
-  const { data, error } = await supabase
-    .from('garment_types')
-    .select('id, label, sort_order')
-    .eq('active', true)
-    .order('sort_order', { ascending: true })
+  const [{ data, error }, sellable] = await Promise.all([
+    supabase
+      .from('garment_types')
+      .select('id, label, sort_order')
+      .eq('active', true)
+      .order('sort_order', { ascending: true }),
+    sellableSets(),
+  ])
 
   if (error) {
     console.error('Supabase error fetching garment_types:', error)
     return []
   }
-  return (data ?? []) as GarmentType[]
+  return ((data ?? []) as GarmentType[]).filter((g) => sellable.garmentTypes.has(g.id))
 }
 
 // Resumen compacto del producto para mandar al modelo — quita campos

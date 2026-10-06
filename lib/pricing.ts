@@ -71,13 +71,17 @@ export async function quoteOrder(
     city: string
     couponCode?: string | null
     customer: { email?: string | null; phone?: string | null }
+    // Productos de prueba: solo el equipo los compra (admins en la web,
+    // TEAM_WHATSAPP_NUMBERS en el bot). Un cliente con el link no puede
+    // comprar una camiseta de $1.500.
+    allowTest?: boolean
   },
 ): Promise<QuoteResult> {
   const fail = (error: string, status = 400): QuoteResult => ({ ok: false, error, status })
 
   const { data: products } = await supabase
     .from('products_full')
-    .select('id, name, price, sale_price, on_sale, sizes, colors, available, collection_active, out_of_stock, free_shipping, stock_mode, stock_variants')
+    .select('id, name, price, sale_price, on_sale, sizes, colors, available, collection_active, out_of_stock, free_shipping, stock_mode, stock_variants, is_test')
     .in('id', Array.from(new Set(input.lines.map((l) => l.product_id))))
   const byId = new Map((products ?? []).map((p) => [String(p.id), p as Record<string, unknown>]))
 
@@ -86,7 +90,7 @@ export async function quoteOrder(
   let freeShipping = false
   for (const l of input.lines) {
     const p = byId.get(l.product_id)
-    if (!p || p.available === false || p.collection_active === false) {
+    if (!p || p.available === false || p.collection_active === false || (p.is_test && !input.allowTest)) {
       return fail(`El producto "${l.product_id}" no existe o ya no está disponible.`, 409)
     }
     if (p.out_of_stock) return fail(`"${p.name}" está agotado.`, 409)

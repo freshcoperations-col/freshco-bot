@@ -20,12 +20,13 @@ import {
   getNewArrivals,
   getBestsellers,
   summarizeForAgent,
+  type Product,
 } from './products-db'
 import { buildPaymentLink, newReference } from './wompi'
 import { parseLines, quoteOrder, type Quote } from './pricing'
 import { attachCouponUse, checkCoupon, claimCoupon, releaseCoupon } from './coupons'
 import { applyOrderStock } from './inventory'
-import { notifyTeam, orderAlert } from './notify'
+import { notifyTeam, orderAlert, teamNumbers } from './notify'
 import { sendWhatsAppImage } from './whatsapp'
 import { isValidIntent, type Intent } from './intents'
 
@@ -297,6 +298,13 @@ const TOOLS: Anthropic.Tool[] = [
   },
 ]
 
+// Un producto de prueba, para alguien del equipo, se presenta como disponible
+// (y marcado como prueba) para poder probar pagos por WhatsApp.
+function forAgent(p: Product, isTeam: boolean) {
+  const summary = summarizeForAgent(p)
+  return p.is_test && isTeam ? { ...summary, available: p.visible_to_team, test_product: true } : summary
+}
+
 // La cotización tal como la ve la IA: los números exactos para el resumen.
 function quoteForAgent(q: Quote) {
   return {
@@ -324,6 +332,9 @@ async function executeTool(
   input: Record<string, unknown>,
   customerPhone: string,
 ): Promise<string> {
+  // Los números del equipo (TEAM_WHATSAPP_NUMBERS) ven y pueden comprar los
+  // productos de prueba, para probar pagos por WhatsApp.
+  const isTeam = teamNumbers().includes(customerPhone)
   switch (name) {
     case 'search_products': {
       const limit = typeof input.limit === 'number' ? input.limit : 20
@@ -336,19 +347,20 @@ async function executeTool(
         color: input.color as string | undefined,
         on_sale: input.on_sale as boolean | undefined,
         only_available: true,
+        include_test: isTeam,
         limit,
       })
       return JSON.stringify({
         count: products.length,
-        products: products.map(summarizeForAgent),
+        products: products.map((p) => forAgent(p, isTeam)),
       })
     }
 
     case 'get_product_by_id': {
       const id = String(input.id ?? '')
       const product = await getProductById(id)
-      if (!product) return JSON.stringify({ error: `Producto '${id}' no encontrado.` })
-      return JSON.stringify({ product: summarizeForAgent(product) })
+      if (!product || (product.is_test && !isTeam)) return JSON.stringify({ error: `Producto '${id}' no encontrado.` })
+      return JSON.stringify({ product: forAgent(product, isTeam) })
     }
 
     case 'get_bestsellers': {
@@ -547,6 +559,7 @@ async function executeTool(
         city: String(input.city ?? ''),
         couponCode: input.coupon_code ? String(input.coupon_code) : null,
         customer: { email: input.customer_email ? String(input.customer_email) : null, phone: customerPhone },
+        allowTest: isTeam,
       })
       if (!quoted.ok) return JSON.stringify({ error: quoted.error })
       return JSON.stringify(quoteForAgent(quoted.quote))
@@ -587,6 +600,7 @@ async function executeTool(
         city: String(input.city ?? ''),
         couponCode: input.coupon_code ? String(input.coupon_code) : null,
         customer: { email: customerEmail ?? null, phone: customerPhone },
+        allowTest: isTeam,
       })
       if (!quoted.ok) return JSON.stringify({ error: quoted.error })
       const q = quoted.quote

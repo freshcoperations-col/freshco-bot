@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase'
-import { bearerToken } from '@/lib/admin-auth'
+import { bearerToken, verifyAdmin } from '@/lib/admin-auth'
 import { attachCouponUse, claimCoupon, releaseCoupon } from '@/lib/coupons'
 import { parseLines, quoteOrder } from '@/lib/pricing'
 import { allowRequest } from '@/lib/rate-limit'
@@ -102,6 +102,8 @@ export async function POST(request: NextRequest) {
     city,
     couponCode: body.coupon_code ? String(body.coupon_code) : null,
     customer: { email, phone },
+    // Productos de prueba: solo cuentas de administrador pueden comprarlos.
+    allowTest: (await verifyAdmin(token)).ok,
   })
   if (!quoted.ok) return fail(quoted.error, quoted.status, headers)
   const { items, total, shipping_cost: shippingCost, discount_amount: discountAmount, coupon } = quoted.quote
