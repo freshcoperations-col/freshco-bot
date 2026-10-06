@@ -4,8 +4,10 @@ import { sendWhatsAppMessage } from '@/lib/whatsapp'
 
 export const dynamic = 'force-dynamic'
 
-// Cron de Vercel — corre cada hora (config en vercel.json).
-// Encuentra órdenes "pending" con link Wompi generado entre hace 2 y 24 horas
+// Cron de Vercel — corre UNA VEZ al día, 21:00 UTC = 4 p. m. Bogotá
+// (vercel.json). Encuentra órdenes "pending" con link Wompi generado entre
+// hace 2 y 26 horas (26 y no 24: corriendo una vez al día, con 24 los pedidos
+// de las 2 horas antes de cada corrida nunca entraban en ninguna)
 // que aún no hayan sido recordadas, y manda un mensaje suave al cliente.
 //
 // Auth: Vercel manda Authorization: Bearer <CRON_SECRET> automáticamente
@@ -24,7 +26,7 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient()
   const now = Date.now()
   const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000).toISOString()
-  const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000).toISOString()
+  const twentyFourHoursAgo = new Date(now - 26 * 60 * 60 * 1000).toISOString()
 
   const { data: orders, error } = await supabase
     .from('orders')
@@ -57,7 +59,7 @@ export async function GET(request: NextRequest) {
       `Si cambiaste de opinión o necesitas ayuda con algo más, solo dime 🙏`
 
     try {
-      await sendWhatsAppMessage(order.customer_phone as string, message)
+      await sendWhatsAppMessage(order.customer_phone as string, message, short)
       await supabase
         .from('orders')
         .update({ reminder_sent_at: new Date().toISOString() })
