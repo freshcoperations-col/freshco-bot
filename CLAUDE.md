@@ -51,6 +51,7 @@ No tiene interfaz propia: `app/page.tsx` es solo una página de estado.
 
 ## Convenciones
 - Español colombiano en textos al cliente. Precios en COP, formato `$XX.XXX`.
+- **Next 16 + React 19** (bot y admin). En rutas dinámicas `params` es una Promise: `props: { params: Promise<{ id: string }> }` y `const params = await props.params`.
 - Un archivo `route.ts` de Next solo puede exportar handlers (GET, POST…). Los helpers van en `lib/`.
 - El body de una función de Vercel tiene un máximo de 4.5 MB (más grande da 413, y sin CORS). Las imágenes se comprimen en el cliente.
 - Nada de `[...map.values()]`, porque el tsconfig no tiene downlevelIteration: usa `Array.from`.
